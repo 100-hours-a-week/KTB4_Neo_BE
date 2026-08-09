@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="360" viewBox="0 0 1400 360">
+  <defs><style>.bg{fill:#0d1117}.node{fill:#21262d;stroke:#8b949e;stroke-width:2}.hot{fill:#17202a;stroke:#58a6ff;stroke-width:2}.title{fill:#f0f6fc;font:700 30px Arial,sans-serif}.label{fill:#f0f6fc;font:600 17px Arial,sans-serif}.sub{fill:#8b949e;font:14px Arial,sans-serif}.edge{stroke:#c9d1d9;stroke-width:2;fill:none;marker-end:url(#a)}</style><marker id="a" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#c9d1d9"/></marker></defs>
+  <rect class="bg" width="1400" height="360"/><text class="title" x="40" y="58">CI/CD Pipeline</text>
+  <rect class="node" x="45" y="135" width="180" height="105" rx="12"/><text class="label" x="87" y="177">Git Push</text><text class="sub" x="89" y="207">main branch</text>
+  <rect class="node" x="285" y="135" width="190" height="105" rx="12"/><text class="label" x="321" y="177">GitHub Actions</text><text class="sub" x="329" y="207">Checkout · Buildx</text>
+  <rect class="hot" x="535" y="135" width="190" height="105" rx="12"/><text class="label" x="584" y="177">Docker Build</text><text class="sub" x="574" y="207">latest + commit SHA</text>
+  <rect class="hot" x="785" y="135" width="190" height="105" rx="12"/><text class="label" x="829" y="177">Docker Hub</text><text class="sub" x="837" y="207">Image Push</text>
+  <rect class="node" x="1035" y="135" width="150" height="105" rx="12"/><text class="label" x="1074" y="177">EC2 SSH</text><text class="sub" x="1058" y="207">compose.yml copy</text>
+  <rect class="node" x="1245" y="135" width="120" height="105" rx="12"/><text class="label" x="1274" y="177">Deploy</text><text class="sub" x="1266" y="207">pull · up -d</text>
+  <path class="edge" d="M225 187 H285"/><path class="edge" d="M475 187 H535"/><path class="edge" d="M725 187 H785"/><path class="edge" d="M975 187 H1035"/><path class="edge" d="M1185 187 H1245"/>
+  <text class="sub" x="1035" y="285">배포 후 컨테이너 상태와 최근 로그 확인</text>
+</svg>

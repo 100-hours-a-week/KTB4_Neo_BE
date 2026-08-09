@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+  <defs>
+    <style>
+      .bg{fill:#0d1117}.panel{fill:#161b22;stroke:#586069;stroke-width:2}.aws{fill:#1f2937;stroke:#8b949e;stroke-width:2}.node{fill:#21262d;stroke:#c9d1d9;stroke-width:2}.store{fill:#17202a;stroke:#58a6ff;stroke-width:2}.title{fill:#f0f6fc;font:700 30px Arial,sans-serif}.label{fill:#f0f6fc;font:600 18px Arial,sans-serif}.sub{fill:#8b949e;font:15px Arial,sans-serif}.edge{stroke:#c9d1d9;stroke-width:2;fill:none;marker-end:url(#arrow)}.edge2{stroke:#58a6ff;stroke-width:2;fill:none;marker-end:url(#blue)}
+    </style>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#c9d1d9"/></marker>
+    <marker id="blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#58a6ff"/></marker>
+  </defs>
+  <rect class="bg" width="1400" height="820"/>
+  <text class="title" x="40" y="58">System Architecture</text>
+  <rect class="aws" x="340" y="90" width="1020" height="680" rx="18"/>
+  <text class="label" x="820" y="125">AWS</text>
+  <rect class="panel" x="385" y="165" width="630" height="535" rx="16"/>
+  <text class="label" x="675" y="200">EC2 · Docker Compose</text>
+  <rect class="node" x="470" y="250" width="220" height="115" rx="12"/>
+  <text class="label" x="548" y="290">Nginx</text><text class="sub" x="497" y="320">SPA / Reverse Proxy</text><text class="sub" x="530" y="344">SSE Proxy</text>
+  <rect class="node" x="765" y="250" width="220" height="115" rx="12"/>
+  <text class="label" x="811" y="290">Spring Boot</text><text class="sub" x="812" y="320">REST API / JWT</text><text class="sub" x="818" y="344">Docker Container</text>
+  <rect class="store" x="470" y="470" width="220" height="105" rx="12"/>
+  <text class="label" x="552" y="512">Redis 7</text><text class="sub" x="505" y="542">Draft Cache · AOF</text>
+  <rect class="node" x="765" y="470" width="220" height="105" rx="12"/>
+  <text class="label" x="808" y="512">Docker Volume</text><text class="sub" x="807" y="542">Redis / Upload Data</text>
+  <rect class="store" x="1090" y="220" width="220" height="105" rx="52"/>
+  <text class="label" x="1145" y="264">RDS MySQL</text><text class="sub" x="1140" y="293">Persistent Data</text>
+  <rect class="store" x="1090" y="430" width="220" height="105" rx="52"/>
+  <text class="label" x="1152" y="474">Amazon S3</text><text class="sub" x="1135" y="503">Image Storage</text>
+  <rect class="node" x="45" y="245" width="220" height="105" rx="12"/>
+  <text class="label" x="96" y="288">User Browser</text><text class="sub" x="83" y="318">Page · REST API · SSE</text>
+  <rect class="node" x="45" y="510" width="220" height="105" rx="12"/>
+  <text class="label" x="76" y="552">GitHub Actions</text><text class="sub" x="82" y="582">Build · Push · Deploy</text>
+  <rect class="node" x="390" y="715" width="220" height="70" rx="12"/>
+  <text class="label" x="440" y="758">Docker Hub</text>
+  <path class="edge" d="M265 297 H470"/><text class="sub" x="305" y="280">HTTP :80</text>
+  <path class="edge" d="M690 307 H765"/><text class="sub" x="700" y="290">/api</text>
+  <path class="edge2" d="M765 335 C720 375 650 420 580 470"/><text class="sub" x="650" y="405">Hash / ZSet</text>
+  <path class="edge" d="M690 522 H765"/><text class="sub" x="700" y="505">AOF Volume</text>
+  <path class="edge2" d="M985 285 H1090"/><text class="sub" x="1005" y="268">JPA/JDBC</text>
+  <path class="edge2" d="M985 340 C1040 360 1035 482 1090 482"/><text class="sub" x="1010" y="400">Presigned URL</text>
+  <path class="edge" d="M265 555 C320 555 330 750 390 750"/><text class="sub" x="280" y="650">Build &amp; Push</text>
+  <path class="edge" d="M610 750 C720 750 700 430 790 365"/><text class="sub" x="675" y="650">Pull Image</text>
+  <path class="edge" d="M265 540 C335 500 320 430 385 430"/><text class="sub" x="278" y="468">SSH Deploy</text>
+</svg>

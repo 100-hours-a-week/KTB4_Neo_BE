@@ -1,0 +1,286 @@
+# 취업 시장에서 살아남기 — Backend
+
+> 취업과 이직에 관한 정보와 고민을 함께 나누는 커뮤니티
+
+## 프로젝트 소개
+
+**취업 시장에서 살아남기**는 취업 혹은 이직을 준비하는 사람들이 서로 취업 시장 혹은 회사에 대한 정보를 공유하고, 취업과 이직에 대하여 가지고 있는 고민거리들을 공유하며 조언을 받을 수 있는 커뮤니티입니다.
+
+이 저장소는 사용자·게시글·댓글·이미지 업로드 API와 인증·인가를 제공하는 백엔드 저장소입니다. 특히 작성 빈도가 높은 게시글 임시 저장 기능에 Redis를 도입하고, Redis와 MySQL 사이의 일관성·원자성·복구 가능성을 고려하여 설계했습니다.
+
+## 핵심 구현
+
+- 사용자, 게시글, 댓글, 임시글, 좋아요, 조회수, 신고 도메인 모델링
+- Spring Security와 JWT Access/Refresh Token을 이용한 인증·인가
+- 게시글·댓글 CRUD 및 작성자 기반 수정·삭제 권한 검증
+- Redis Hash 기반 임시글 자동 저장과 TTL 관리
+- Redis Sorted Set 기반 변경 대상 추적 및 MySQL 비동기 동기화
+- Lua Script를 이용한 버전 검증, Hash 갱신, TTL 연장, dirty 등록의 원자적 처리
+- 임시글 게시·삭제 이후 트랜잭션 커밋 시점에 Redis 데이터를 정리하여 정합성 보장
+- Flyway를 이용한 데이터베이스 스키마와 인덱스 버전 관리
+- Presigned URL 기반 S3 이미지 업로드 및 업로드 세션 검증
+- RLock·WATCH/MULTI/EXEC·Lua Script 동시성 제어 방식 비교
+- MySQL 인덱스 도입 전후 실행 계획 및 부하 테스트
+- Testcontainers 기반 실제 MySQL 통합 테스트와 JaCoCo 리포트 생성
+- Docker Compose, Docker Hub, AWS EC2/RDS/S3, GitHub Actions 기반 자동 배포
+
+## 개발 인원 및 기간
+
+### 개발 기간
+
+- 2026.05.26 ~ 2026.08.09
+
+### 개발 인원
+
+- 프론트엔드 / 백엔드 1명
+- 개인 프로젝트
+
+### 담당 범위
+
+- 도메인 및 데이터베이스 모델링
+- REST API 설계와 구현
+- 인증 및 인가 구현
+- Redis를 이용한 게시글 임시 저장 기능 구현
+- 성능 테스트 및 부하 테스트
+- 인프라 및 CI/CD 구성
+- Docker 이미지 빌드 및 Docker Hub 배포
+- GitHub Actions를 이용한 EC2 배포 자동화
+
+## 사용 기술 및 Tools
+
+| 구분 | 기술 및 도구 | 활용 |
+|---|---|---|
+| Language | Java 17 | 백엔드 애플리케이션 구현 |
+| Framework | Spring Boot 4.0.6 | REST API, 스케줄러 및 애플리케이션 구성 |
+| Security | Spring Security, JWT | Access/Refresh Token 인증 및 권한 검증 |
+| ORM | Spring Data JPA, Hibernate | 도메인 엔티티 영속화와 데이터 접근 |
+| Database | MySQL 8, AWS RDS | 서비스 데이터 영구 저장 |
+| Cache | Redis 7, Spring Data Redis | 임시글 캐시, TTL 및 동기화 대상 관리 |
+| Concurrency | Lua Script, Redisson RLock, WATCH/MULTI/EXEC | Redis 원자성 보장 방식 구현 및 비교 |
+| Migration | Flyway | 스키마와 인덱스 변경 이력 관리 |
+| Storage | AWS S3, Presigned URL | 이미지 직접 업로드 및 업로드 검증 |
+| Test | JUnit 5, Spring Security Test, Testcontainers | 단위·인가·영속성 통합 테스트 |
+| Performance | JMeter, EXPLAIN ANALYZE | 부하 테스트와 인덱스 성능 비교 |
+| Coverage | JaCoCo | 테스트 커버리지 리포트 생성 |
+| Build | Gradle | 의존성 관리, 테스트 및 애플리케이션 빌드 |
+| Container | Docker, Docker Compose | 실행 환경 표준화와 서비스 통합 실행 |
+| CI/CD | GitHub Actions, Docker Hub | 이미지 빌드·푸시 및 EC2 자동 배포 |
+| Collaboration | Git, GitHub | 버전 관리와 소스 코드 관리 |
+
+## 관련 저장소
+
+- Backend Repository: [KTB4_Neo_BE](https://github.com/100-hours-a-week/KTB4_Neo_BE)
+- Frontend Repository: [KTB4_Neo_FE](https://github.com/100-hours-a-week/KTB4_Neo_FE)
+
+## 폴더 구조
+
+```text
+.
+├── .github/
+│   └── workflows/
+│       └── backend-ci-cd.yml
+├── backend/
+│   ├── gradle/
+│   ├── src/
+│   │   ├── main/
+│   │   │   ├── java/com/ktb/community/
+│   │   │   │   ├── benchmark/       # Redis 원자성 비교용 API
+│   │   │   │   ├── domain/
+│   │   │   │   │   ├── comment/     # 댓글 도메인
+│   │   │   │   │   ├── draft/       # 임시글 저장·동기화·정리
+│   │   │   │   │   ├── post/        # 게시글·좋아요·조회·신고
+│   │   │   │   │   ├── upload/      # S3 이미지 업로드
+│   │   │   │   │   └── user/        # 사용자와 인증 정보
+│   │   │   │   ├── global/           # 공통 응답·설정·예외 처리
+│   │   │   │   └── security/         # JWT 필터와 Spring Security
+│   │   │   └── resources/
+│   │   │       ├── db/migration/      # Flyway SQL
+│   │   │       ├── redis/             # 임시글 Lua Script
+│   │   │       └── application*.yaml
+│   │   └── test/                       # 단위·통합·인가 테스트
+│   ├── Dockerfile
+│   └── build.gradle
+├── docs/
+│   └── diagrams/                        # README 다이어그램
+├── performance-test/
+│   ├── jmeter/                          # JMeter 테스트 계획
+│   ├── sql/                             # EXPLAIN ANALYZE SQL
+│   └── run-*.sh                         # 정확성·성능 테스트 실행 스크립트
+├── compose.local.yml
+├── compose.perf.yml
+└── compose.yml
+```
+
+## 시스템 아키텍처
+
+<p align="center">
+  <img src="docs/diagrams/system-architecture.svg" width="100%" alt="시스템 아키텍처">
+</p>
+
+- 사용자 요청은 EC2의 Nginx를 통해 정적 프런트엔드 또는 Spring Boot API로 전달됩니다.
+- Spring Boot는 RDS MySQL에 영구 데이터를 저장하고 Redis에 임시글을 캐싱합니다.
+- 이미지는 Presigned URL을 이용해 S3에 직접 업로드합니다.
+- 운영 서비스는 Docker Compose 내부 네트워크에서 통신하며 외부에는 Nginx의 80번 포트만 공개합니다.
+- GitHub Actions가 이미지를 Docker Hub에 푸시하고 SSH로 EC2의 컨테이너를 갱신합니다.
+
+## 주요 기능
+
+### 회원과 인증
+
+- 회원가입, 로그인, 로그아웃 및 회원 탈퇴
+- JWT Access Token과 Refresh Token 발급 및 재발급
+- 비밀번호 암호화와 인증 실패 응답 처리
+- 사용자 정보와 비밀번호 수정
+- 작성자와 요청 사용자의 식별자를 비교한 리소스 접근 제어
+
+### 게시글과 댓글
+
+- 게시글 목록·상세 조회, 작성, 수정 및 논리 삭제
+- 게시글 수정 이력과 수정 버전 보관
+- 사용자별 좋아요 등록·취소 및 중복 방지
+- 사용자별 조회 기록과 조회수 관리
+- 신고 유형 조회와 게시글 신고 중복 방지
+- 댓글·대댓글 작성, 수정, 삭제 및 작성자 권한 검증
+
+### 이미지 업로드
+
+- S3 Presigned URL 발급
+- 업로드 목적, 파일 형식, 크기 및 만료 시간 검증
+- 업로드 완료 요청을 통한 세션 확정
+- 회원가입 이미지와 인증 사용자 이미지 업로드 경로 분리
+
+### 게시글 임시 저장
+
+<p align="center">
+  <img src="docs/diagrams/draft-flow.svg" width="100%" alt="게시글 임시 저장 처리 흐름">
+</p>
+
+1. 사용자가 글쓰기를 시작하면 사용자당 하나의 `ACTIVE` Draft를 생성합니다.
+2. 클라이언트는 변경할 때마다 증가시킨 `contentVersion`과 함께 자동 저장을 요청합니다.
+3. Lua Script가 현재 버전과 내용을 검증하고 Redis Hash 갱신, TTL 연장, Sorted Set 등록을 하나의 원자적 연산으로 처리합니다.
+4. 동일 요청은 멱등 처리하고 과거 버전 또는 같은 버전의 다른 내용은 충돌로 분류합니다.
+5. 스케줄러는 `draft:dirty`에서 오래된 변경부터 제한된 개수만 가져옵니다.
+6. Redis와 RDB의 `contentVersion`을 비교한 뒤 최신 스냅샷을 MySQL에 저장합니다.
+7. 저장한 버전과 Redis 최신 버전이 일치할 때만 dirty 항목을 제거하여 동기화 중 발생한 새 변경을 잃지 않습니다.
+8. 사용자가 임시글을 게시하거나 삭제하면 RDB 트랜잭션 커밋 이후 Redis Hash와 dirty 항목을 정리합니다.
+
+## 주요 기술적 개선
+
+### 임시글 저장소로 Redis를 선택한 이유
+
+자동 저장은 사용자가 입력하는 동안 짧은 주기로 반복되므로 일반 게시글 작성보다 쓰기 요청이 훨씬 많이 발생합니다. 모든 변경을 즉시 MySQL에 반영하면 디스크 I/O와 트랜잭션 비용이 증가하고, 자동 저장 트래픽이 핵심 조회·작성 기능의 데이터베이스 자원을 함께 점유할 수 있습니다.
+
+Redis를 쓰기 버퍼로 두어 자동 저장 요청을 메모리에서 빠르게 처리하고, 변경된 Draft만 일정 주기로 MySQL에 묶어 반영하도록 구성했습니다. Redis AOF와 Draft Hash TTL을 적용하고 RDB 스냅샷을 복구 기준으로 사용하여 캐시 유실과 장기 미사용 데이터도 고려했습니다.
+
+### 자동 저장에 Hash 자료 구조를 선택한 이유
+
+하나의 임시글은 `title`, `postBody`, `postImage`, `contentVersion`, `updatedAt`처럼 이름이 있는 여러 필드로 구성됩니다. Redis Hash는 `draft:{draftId}` 하나에 필드 단위로 데이터를 표현할 수 있어 문자열 JSON보다 구조와 의도가 명확합니다.
+
+- 임시글 단위 조회와 삭제가 간단합니다.
+- 필드 이름이 데이터에 포함되어 역직렬화 없이 필요한 값을 검증할 수 있습니다.
+- Lua Script 안에서 현재 버전과 내용을 직접 비교할 수 있습니다.
+- 하나의 키에 TTL을 적용해 임시글 전체의 만료 시점을 일관되게 관리할 수 있습니다.
+- Hash 갱신과 TTL 연장, dirty 등록을 단일 Lua Script로 묶기 좋습니다.
+
+자동 저장 과정에서는 일부 필드만 변경하더라도 요청 스냅샷 전체를 저장합니다. 이를 통해 서로 다른 시점의 필드가 섞이는 부분 갱신 문제를 방지하고 하나의 `contentVersion`이 하나의 완전한 Draft 상태를 나타내도록 했습니다.
+
+### RDB 동기화 대상을 Sorted Set으로 관리한 이유
+
+변경된 Draft ID만 별도 `draft:dirty` Sorted Set에 저장하고, 마지막 변경 시각의 Epoch Millisecond를 score로 사용했습니다.
+
+- 변경된 임시글만 조회하므로 Redis 전체 키 스캔이 필요하지 않습니다.
+- score 범위 조회로 일정 시간 이상 지난 Draft만 동기화할 수 있습니다.
+- 오래된 변경부터 정렬된 순서로 처리할 수 있습니다.
+- `LIMIT`을 적용해 한 번에 처리할 동기화 배치를 제한할 수 있습니다.
+- 같은 Draft가 여러 번 저장돼도 member가 중복되지 않고 score만 최신 시각으로 갱신됩니다.
+- 새로운 자동 저장이 발생하면 score가 뒤로 이동하므로 입력 중인 Draft의 불필요한 RDB 쓰기를 줄일 수 있습니다.
+
+### Lua Script를 이용한 원자성 보장
+
+자동 저장에는 버전 확인, 내용 충돌 확인, Hash 저장, TTL 연장, Sorted Set 등록이 함께 필요합니다. 이를 여러 Redis 명령으로 분리하면 명령 사이에 다른 요청이 개입해 부분 저장이나 최신 데이터 덮어쓰기가 발생할 수 있습니다.
+
+Lua Script로 전체 과정을 Redis 서버 내부의 단일 원자적 연산으로 실행하고 결과를 `SAVED`, `IDEMPOTENT`, `VERSION_CONFLICT`, `CONTENT_CONFLICT`로 구분했습니다. 동기화 완료 후 dirty 항목을 제거할 때도 저장한 버전과 현재 Redis 버전이 일치하는 경우에만 제거하는 별도의 Lua Script를 사용했습니다.
+
+## 테스트
+
+### 인덱스 도입 성능 테스트
+
+> 인덱스 적용 전후의 실행 계획, 응답 시간, 처리량 및 테스트 결과를 작성할 예정입니다.
+
+### Lua Script를 사용한 이유
+
+> Lua Script, Redisson RLock, WATCH + MULTI + EXEC 방식의 정확성 및 성능 비교 결과를 작성할 예정입니다.
+
+#### 비교 항목
+
+| 항목 | Lua Script | RLock | WATCH + MULTI + EXEC |
+|---|---|---|---|
+| 원자성 보장 방식 | 작성 예정 | 작성 예정 | 작성 예정 |
+| 네트워크 왕복 | 작성 예정 | 작성 예정 | 작성 예정 |
+| 충돌 처리 | 작성 예정 | 작성 예정 | 작성 예정 |
+| 처리량 및 지연시간 | 작성 예정 | 작성 예정 | 작성 예정 |
+| 최종 선택 근거 | 작성 예정 | 작성 예정 | 작성 예정 |
+
+## 데이터베이스 설계
+
+### DB 설계 요구 사항 분석
+
+- 이메일과 닉네임은 중복될 수 없으며 탈퇴 여부를 함께 조회할 수 있어야 합니다.
+- 사용자는 여러 게시글과 댓글을 작성할 수 있습니다.
+- 댓글은 자기 참조 관계를 통해 대댓글을 가질 수 있습니다.
+- 사용자는 하나의 게시글에 좋아요와 신고를 각각 한 번만 등록할 수 있습니다.
+- 사용자별 게시글 조회 시각을 저장해 중복 조회 증가를 제어할 수 있어야 합니다.
+- 게시글 수정 전 내용을 이력으로 남기고 게시글별 revision 순서를 보장해야 합니다.
+- 사용자는 동시에 하나의 활성 임시글만 소유할 수 있어야 합니다.
+- 임시글은 `ACTIVE`, `PUBLISHED`, `DELETED` 상태와 내용 버전을 가져야 합니다.
+- 삭제 데이터는 즉시 물리 삭제하지 않고 삭제 여부와 시각을 기록할 수 있어야 합니다.
+- 생성·수정 시각을 공통 관리하고 자주 사용하는 조회 조건에는 복합 인덱스를 적용해야 합니다.
+
+### ERD
+
+> MySQL Workbench에서 생성한 `ERD.png`를 `docs/ERD.png`에 추가하면 아래에 표시됩니다.
+
+<p align="center">
+  <img src="docs/ERD.png" width="100%" alt="취업 시장에서 살아남기 ERD">
+</p>
+
+### 주요 테이블
+
+| 테이블 | 설명 | 주요 관계 및 제약 |
+|---|---|---|
+| `users` | 사용자 계정과 프로필, 권한, 탈퇴 상태 | 이메일·닉네임 중복 검증 |
+| `posts` | 게시글 본문, 이미지, 집계값 및 상태 | 사용자와 N:1 |
+| `comments` | 댓글과 대댓글 | 게시글·사용자 N:1, 부모 댓글 자기 참조 |
+| `refresh_token` | 사용자별 Refresh Token | 사용자당 하나의 토큰 |
+| `post_likes` | 사용자별 게시글 좋아요 | `(post_id, user_id)` UNIQUE |
+| `post_views` | 사용자별 마지막 게시글 조회 시각 | `(post_id, user_id)` UNIQUE |
+| `post_reports` | 게시글 신고 유형과 처리 상태 | `(post_id, user_id)` UNIQUE |
+| `post_edit_history` | 게시글 수정 전 스냅샷 | `(post_id, revision_no)` UNIQUE |
+| `drafts` | 임시글 RDB 스냅샷과 버전·상태 | 사용자당 하나의 ACTIVE Draft |
+
+## CI/CD 및 배포
+
+<p align="center">
+  <img src="docs/diagrams/cicd-flow.svg" width="100%" alt="CI/CD 배포 흐름">
+</p>
+
+1. `main` 브랜치의 백엔드 또는 배포 설정 변경이 GitHub Actions를 실행합니다.
+2. Buildx로 Spring Boot 백엔드 이미지를 빌드합니다.
+3. Docker Hub에 `latest`와 Git commit SHA 태그를 함께 푸시합니다.
+4. GitHub Actions가 SSH로 EC2에 접속해 운영 `compose.yml`을 복사합니다.
+5. EC2가 최신 백엔드 이미지를 pull하고 해당 서비스만 다시 생성합니다.
+6. 애플리케이션 시작 후 컨테이너 상태와 최근 로그를 확인합니다.
+
+## 회고
+
+이번 프로젝트에서는 기능을 구현하는 것만큼 도메인과 데이터 흐름을 먼저 설계하는 일이 중요하다는 것을 배웠습니다.  
+요구 사항을 구체적인 API와 데이터베이스 명세로 바꾸는 과정이 구현 중 발생할 수 있는 모호함을 크게 줄여주었습니다.  
+특히 게시글 임시 저장은 단순히 Redis에 문자열을 저장하는 기능이 아니라 버전, 원자성, 복구, 만료와 RDB 동기화를 함께 고려해야 하는 문제였습니다.  
+Hash와 Sorted Set을 역할에 따라 분리하면서 자료 구조 선택이 애플리케이션의 처리 흐름과 성능에 직접 영향을 준다는 점을 체감했습니다.  
+Lua Script를 사용해 여러 Redis 명령을 하나의 원자적 연산으로 묶고, 동시 요청에서도 최신 임시글을 보호하는 방법을 익혔습니다.  
+또한 익숙한 방식을 바로 선택하지 않고 Lua, RLock, WATCH + MULTI + EXEC를 같은 조건에서 비교하면서 기술 선택에는 측정 가능한 근거가 필요하다는 것을 배웠습니다.  
+MySQL 인덱스 역시 무조건 추가하기보다 실제 조회 조건과 실행 계획을 확인하고 적용 전후 결과를 비교하는 과정이 중요했습니다.  
+Testcontainers와 부하 테스트 스크립트를 구성하면서 재현 가능한 테스트 환경이 결과의 신뢰도를 결정한다는 점을 알게 되었습니다.  
+개발 계획, API 명세, DB 설계서와 테스트 시나리오를 먼저 작성했다면 구현과 검증을 더 효율적으로 진행할 수 있었겠다는 점도 돌아보게 되었습니다.  
+앞으로는 구현 결과뿐 아니라 설계 의도와 선택 근거를 문서로 남기며, 성능과 안정성을 객관적인 테스트로 검증하는 백엔드 개발자가 되고자 합니다.
+
