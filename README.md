@@ -208,21 +208,133 @@ Lua Script로 전체 과정을 Redis 서버 내부의 단일 원자적 연산으
 
 ### 인덱스 도입 성능 테스트
 
-> 인덱스 적용 전후의 실행 계획, 응답 시간, 처리량 및 테스트 결과를 작성할 예정입니다.
+사용자·게시글·댓글 조회에서 반복되는 검색 조건과 정렬 조건을 분석하고, 데이터 증가 시 발생하는 Full Table Scan과 정렬 비용을 줄이기 위해 복합 인덱스를 도입했습니다.
+
+#### 테스트 설계
+
+- 운영 배포와 분리된 `compose.perf.yml` 환경에서 MySQL과 Redis를 실행했습니다.
+- Flyway V1만 적용한 상태를 A, V2 인덱스까지 적용한 상태를 B로 정의했습니다.
+- 동일한 seed dump와 HikariCP 설정을 사용해 비교 조건을 고정했습니다.
+- 측정 중 Draft 동기화·정리 스케줄러가 개입하지 않도록 성능 프로필의 실행 주기를 365일로 설정했습니다.
+- `EXPLAIN ANALYZE`로 접근 방식과 읽은 행을 비교하고, JMeter 단일 스레드로 API 지연시간을 확인했습니다.
+- 초기 30스레드 테스트는 DB 인덱스 외의 애플리케이션 자원 경합이 결과를 지배해 비교 목적에 맞지 않았으므로 최종 분석에서 제외했습니다.
+
+#### 적용 인덱스
+
+| 인덱스 | 구성 컬럼 | 개선 대상 |
+|---|---|---|
+| `idx_users_email_deleted` | `(email, deleted)` | 활성 사용자 이메일 조회 |
+| `idx_users_nickname_deleted` | `(nickname, deleted)` | 활성 사용자 닉네임 조회 |
+| `idx_posts_deleted_created_at` | `(deleted, created_at DESC)` | 게시글 목록 필터링과 최신순 정렬 |
+| `idx_posts_user_created_at` | `(user_id, created_at)` | 사용자별 기간 내 게시글 수 조회 |
+| `idx_comments_post_created_at` | `(post_id, created_at)` | 게시글별 댓글 조회와 작성순 정렬 |
+| `idx_comments_user_deleted_post` | `(user_id, deleted, post_id)` | 사용자·삭제 여부·게시글 조건 조회 |
+
+#### EXPLAIN ANALYZE 결과
+
+| 조회 | 적용 전 | 적용 후 | SQL 실행시간 변화 |
+|---|---|---|---:|
+| 활성 사용자 이메일 | 사용자 10,000행 Table Scan | Covering Index 1행 | `15.3ms → 0.0186ms` **99.88% 감소** |
+| 활성 사용자 닉네임 | 사용자 10,000행 Table Scan | Covering Index 1행 | `1.99ms → 0.00354ms` **99.82% 감소** |
+| 게시글 첫 페이지 | 게시글 100,000행 스캔·필터·정렬 | 인덱스에서 20행 조회 | `126ms → 0.0421ms` **99.97% 감소** |
+| 게시글 깊은 페이지 | 100,000행 스캔, 80,020행 정렬 | 인덱스 80,020행 조회 | `41.7ms → 8.16ms` **80.43% 감소** |
+| 사용자 기간별 게시글 수 | FK 조회 후 날짜 필터 | 복합 범위 인덱스 | `3.08ms → 1.12ms` **63.64% 감소** |
+| 일반 댓글 | 10행 조회 후 별도 정렬 | 인덱스 순서로 10행 반환 | `2.39ms → 0.0465ms` **98.05% 감소** |
+| 댓글 1,005건 게시글 | 1,005행 조회 후 955행 정렬 | 정렬 없이 955행 반환 | `1.83ms → 0.561ms` **69.34% 감소** |
+
+#### 결과 분석
+
+- 게시글 첫 페이지는 전체 스캔과 정렬이 제거됐고, JMeter API p50도 `123ms → 25ms`로 **79.7% 감소**했습니다.
+- SQL 개선율보다 API 개선율이 작은 이유는 인증, JPA 매핑, 작성자 JOIN, 추가 조회와 JSON 직렬화 비용이 그대로 남기 때문입니다.
+- 깊은 페이지는 정렬이 제거됐지만 `OFFSET 80000`을 처리하려면 여전히 인덱스 80,020개를 읽어야 했습니다. 인덱스만으로 깊은 페이지 문제를 완전히 해결할 수 없으며 추후 Cursor 기반 페이지네이션을 고려할 수 있습니다.
+- 댓글 조회는 접근 행 수가 같아도 `created_at` 순서의 인덱스를 사용하면서 별도 정렬이 제거됐습니다. 일반 댓글 API p50은 `10ms → 6ms`, 댓글 955건 API p50은 `29ms → 24ms`, p95는 `57.3ms → 46.4ms`로 감소했습니다.
+- SQL 실행시간과 API 응답시간을 분리해 측정함으로써 인덱스가 개선한 영역과 애플리케이션에 남은 비용을 구분했습니다.
+
+상세 과정과 실행계획은 [Index 추가하여 조회 성능 개선](https://app.notion.com/p/3b54c7f9a749801487cfe156cc76d1a9)에서 확인할 수 있습니다.
 
 ### Lua Script를 사용한 이유
 
-> Lua Script, Redisson RLock, WATCH + MULTI + EXEC 방식의 정확성 및 성능 비교 결과를 작성할 예정입니다.
+임시글 자동 저장은 현재 Hash 조회, 요청 버전 비교, 조건부 갱신, TTL 연장, dirty Sorted Set 등록을 하나의 논리적 작업으로 처리해야 합니다. 이 과정의 정합성과 비용을 확인하기 위해 Lua Script, WATCH + MULTI + EXEC, Redisson RLock에 동일한 기능 규칙과 부하를 적용해 비교했습니다.
 
-#### 비교 항목
+#### 공통 기능 규칙
 
-| 항목 | Lua Script | RLock | WATCH + MULTI + EXEC |
-|---|---|---|---|
-| 원자성 보장 방식 | 작성 예정 | 작성 예정 | 작성 예정 |
-| 네트워크 왕복 | 작성 예정 | 작성 예정 | 작성 예정 |
-| 충돌 처리 | 작성 예정 | 작성 예정 | 작성 예정 |
-| 처리량 및 지연시간 | 작성 예정 | 작성 예정 | 작성 예정 |
-| 최종 선택 근거 | 작성 예정 | 작성 예정 | 작성 예정 |
+| 조건 | 기대 결과 | Redis 변경 |
+|---|---|---|
+| 요청 버전 > 저장 버전 | `SAVED` | Hash·TTL·dirty 갱신 |
+| 요청 버전 < 저장 버전 | `VERSION_CONFLICT` | 변경 없음 |
+| 같은 버전·같은 내용 | `IDEMPOTENT` | 내용 변경 없음 |
+| 같은 버전·다른 내용 | `CONTENT_CONFLICT` | 변경 없음 |
+
+성공 저장은 Hash 저장, TTL 3일 갱신, dirty 등록을 모두 수행하도록 통일했습니다. dirty 제거도 Redis 버전과 RDB 버전의 관계에 따라 동일한 결과를 내도록 세 전략을 구현했습니다.
+
+#### 테스트 조건
+
+| 항목 | 조건 |
+|---|---|
+| 부하 | 시나리오별 10스레드, 총 50스레드 |
+| Ramp-up | 10초 |
+| 워밍업 | 전략별 60초 1회 |
+| 본 측정 | 전략별 180초 × 독립 5회 |
+| WATCH | 요청당 최대 5회 시도 |
+| RLock | 최대 획득 대기 5초, lease time 미지정 |
+| 애플리케이션 | CPU 1 Core, Memory 1GiB |
+| Redis | CPU 0.5 Core, Memory 512MiB, Redis 7 Alpine, AOF 활성화 |
+
+JWT, MySQL fallback과 Draft Scheduler의 영향을 제거하고 HTTP·Spring MVC·JSON 비용은 세 전략에 동일하게 유지했습니다. 실행 순서는 전략별 시간 효과를 줄이기 위해 매 회차 교차했습니다.
+
+#### 정합성 검증 결과
+
+| 항목 | Lua | WATCH | RLock |
+|---|---:|---:|---:|
+| Stale overwrite | 0 | 0 | 0 |
+| Latest dirty loss | 0 | 0 | 0 |
+| Partial Hash update | 0 | 0 | 0 |
+| Hash 저장 후 dirty 누락 | 0 | 0 | 0 |
+| JMeter HTTP 오류 | 0 | 0 | 0 |
+| WATCH 5회 시도 소진 | - | 134 | - |
+| RLock timeout | - | - | 0 |
+
+세 전략 모두 결정적 동시성 시험에서 데이터 정합성 오류가 발생하지 않았습니다. WATCH의 134건은 오래된 데이터로 덮어쓴 오류가 아니라 충돌 후 5회 안에 `EXEC`하지 못해 안전하게 포기한 요청이며, 자동 저장 1,632,895건의 약 **0.0082%**였습니다.
+
+#### 5회 평균 성능
+
+| 지표 | Lua Script | WATCH + MULTI + EXEC | Redisson RLock |
+|---|---:|---:|---:|
+| 총 요청 수 | **2,465,097** | 1,959,934 | 771,562 |
+| 평균 TPS | **2,737.9** | 2,175.0 | 853.5 |
+| TPS 중앙값 | **2,762.1** | 2,210.5 | 888.8 |
+| 평균 응답 시간 | **17.65ms** | 22.45ms | 56.87ms |
+| p50 | **4.2ms** | 4.8ms | 8.0ms |
+| p95 | **83.8ms** | 86.8ms | 203.6ms |
+| p99 | **91.0ms** | 94.4ms | 359.6ms |
+| 최대 응답 시간 평균 | **491.4ms** | 657.6ms | 1,195.2ms |
+| 평균 Redis CPU | **10.22%** | 12.76% | 21.58% |
+
+#### 전략별 해석
+
+| 전략 | 동작 방식 | 결과와 트레이드오프 |
+|---|---|---|
+| Lua Script | 조회·비교·조건부 변경을 Redis 서버에서 한 번에 실행 | 가장 높은 처리량과 가장 낮은 지연·Redis CPU. 추가 왕복과 외부 락이 없음 |
+| WATCH | 감시 후 MULTI/EXEC, 충돌 시 최대 5회 재시도 | 정합성은 유지했지만 재시도 왕복과 연결 풀 관리가 필요하고 134건이 시도 한도 소진 |
+| RLock | Draft별 분산락 획득 후 임계 구역 직렬화 | Timeout 없이 안전했지만 락 대기와 획득·해제 통신으로 처리량과 Tail Latency가 가장 불리 |
+
+#### 최종 선택
+
+Lua는 WATCH보다 평균 처리량이 **25.9% 높고** 평균 응답 시간이 **21.4% 낮았습니다**. RLock보다 평균 처리량이 **220.8% 높고** 평균 응답 시간이 **69.0% 낮았습니다**. 현재 문제는 Redis 내부에서 끝나는 짧고 경합 가능한 조건부 갱신이므로, 정합성 오류 없이 가장 단순한 왕복 구조와 우수한 성능을 보인 Lua Script를 선택했습니다.
+
+이 결과는 로컬 Docker와 제한된 CPU 환경에서 수행한 상대 비교이며 운영 환경의 절대 TPS를 의미하지 않습니다. 단일 Redis 기준이므로 Redis Cluster를 도입한다면 Script가 사용하는 키의 Hash Slot도 함께 설계해야 합니다.
+
+상세 결과는 [Lua·WATCH·RLock 테스트 결과 및 분석](https://app.notion.com/p/3b64c7f9a7498107adf3d5d1f52dde3c)에서 확인할 수 있습니다.
+
+#### 재현 자료
+
+- `performance-test/jmeter/before-index-read.jmx`
+- `performance-test/sql/index-explain.sql`
+- `performance-test/sql/comment-user-index-explain.sql`
+- `performance-test/jmeter/draft-atomicity-comparison.jmx`
+- `performance-test/run-draft-atomicity-correctness.sh`
+- `performance-test/run-draft-atomicity-benchmark.sh`
+- `performance-test/analyze-draft-atomicity-results.py`
 
 ## 데이터베이스 설계
 
