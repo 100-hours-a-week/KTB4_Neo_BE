@@ -43,7 +43,9 @@ public class CommentService {
                 request.getCommentBody()
         );
 
-        Comment savedComment = commentRepository.save(comment);
+        Comment savedComment = commentRepository.saveAndFlush(comment);
+
+        CommentResponseDto response = toCommentResponse(savedComment);
 
         int updatedRows = postRepository.increaseComments(post.getPostId());
 
@@ -51,7 +53,7 @@ public class CommentService {
             throw new ApiException(ErrorCode.POST_NOT_FOUND);
         }
 
-        return toCommentResponse(savedComment);
+        return response;
     }
 
     public CommentResponseDto createReply(Long userId, Long parentCommentId, CommentRequestDto request) {
@@ -81,7 +83,9 @@ public class CommentService {
                 request.getCommentBody()
         );
 
-        Comment savedReply = commentRepository.save(reply);
+        Comment savedReply = commentRepository.saveAndFlush(reply);
+
+        CommentResponseDto response = toCommentResponse(savedReply);
 
         int updatedRows = postRepository.increaseComments(post.getPostId());
 
@@ -89,7 +93,7 @@ public class CommentService {
             throw new ApiException(ErrorCode.POST_NOT_FOUND);
         }
 
-        return toCommentResponse(savedReply);
+        return response;
     }
 
     @Transactional(readOnly = true)
