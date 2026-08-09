@@ -159,10 +159,12 @@
 2. 클라이언트는 변경할 때마다 증가시킨 `contentVersion`과 함께 자동 저장을 요청합니다.
 3. Lua Script가 현재 버전과 내용을 검증하고 Redis Hash 갱신, TTL 연장, Sorted Set 등록을 하나의 원자적 연산으로 처리합니다.
 4. 동일 요청은 멱등 처리하고 과거 버전 또는 같은 버전의 다른 내용은 충돌로 분류합니다.
-5. 스케줄러는 `draft:dirty`에서 오래된 변경부터 제한된 개수만 가져옵니다.
-6. Redis와 RDB의 `contentVersion`을 비교한 뒤 최신 스냅샷을 MySQL에 저장합니다.
-7. 저장한 버전과 Redis 최신 버전이 일치할 때만 dirty 항목을 제거하여 동기화 중 발생한 새 변경을 잃지 않습니다.
-8. 사용자가 임시글을 게시하거나 삭제하면 RDB 트랜잭션 커밋 이후 Redis Hash와 dirty 항목을 정리합니다.
+5. Sync Scheduler는 1분마다 `draft:dirty` Sorted Set에서 오래된 score 순으로 최대 100개의 Draft ID만 가져옵니다. Sorted Set에는 임시글 본문이 저장되지 않습니다.
+6. 조회한 ID로 `draft:{draftId}` Redis Hash를 읽고, Hash의 최신 스냅샷과 `contentVersion`을 MySQL Draft에 저장합니다.
+7. MySQL 트랜잭션 커밋 후 저장 버전과 Redis 최신 버전이 일치할 때만 `draft:dirty`의 해당 ID를 제거합니다. 동기화 중 새 자동 저장이 발생했다면 dirty 항목을 유지합니다.
+8. 동기화가 완료돼도 Redis Hash는 즉시 삭제하지 않고 3일 TTL 동안 유지하여 이어쓰기와 복구에 사용합니다.
+9. 사용자가 임시글을 게시하거나 삭제하면 RDB 트랜잭션 커밋 이후 Redis Hash와 dirty 항목을 함께 정리합니다.
+10. Cleanup Scheduler는 하루마다 MySQL에서 보존 기간 7일이 지난 비활성 Draft를 최대 100건씩 물리 삭제하며, Redis Sorted Set 정리와는 별개의 역할입니다.
 
 ## 주요 기술적 개선
 
@@ -186,14 +188,15 @@ Redis를 쓰기 버퍼로 두어 자동 저장 요청을 메모리에서 빠르�
 
 ### RDB 동기화 대상을 Sorted Set으로 관리한 이유
 
-변경된 Draft ID만 별도 `draft:dirty` Sorted Set에 저장하고, 마지막 변경 시각의 Epoch Millisecond를 score로 사용했습니다.
+변경된 Draft ID만 별도 `draft:dirty` Sorted Set에 저장하고, 마지막 변경 시각의 Epoch Millisecond를 score로 사용했습니다. 실제 제목·본문·이미지·버전은 Sorted Set이 아닌 `draft:{draftId}` Hash에 저장됩니다.
 
-- 변경된 임시글만 조회하므로 Redis 전체 키 스캔이 필요하지 않습니다.
+- Sync Scheduler가 변경된 Draft ID만 조회하므로 Redis 전체 키 스캔이 필요하지 않습니다.
 - score 범위 조회로 일정 시간 이상 지난 Draft만 동기화할 수 있습니다.
 - 오래된 변경부터 정렬된 순서로 처리할 수 있습니다.
 - `LIMIT`을 적용해 한 번에 처리할 동기화 배치를 제한할 수 있습니다.
 - 같은 Draft가 여러 번 저장돼도 member가 중복되지 않고 score만 최신 시각으로 갱신됩니다.
 - 새로운 자동 저장이 발생하면 score가 뒤로 이동하므로 입력 중인 Draft의 불필요한 RDB 쓰기를 줄일 수 있습니다.
+- MySQL 커밋 후 버전 일치가 확인된 항목만 Sync 로직에서 제거하므로 동기화 도중 발생한 최신 변경을 보존합니다.
 
 ### Lua Script를 이용한 원자성 보장
 
