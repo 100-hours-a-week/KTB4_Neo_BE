@@ -32,7 +32,7 @@
 
 ### 개발 인원
 
-- 프론트엔드 / 백엔드 1명
+- 프론트엔드 / 백엔드 1명 (본인)
 - 개인 프로젝트
 
 ### 담당 범위
@@ -69,7 +69,6 @@
 
 ## 관련 저장소
 
-- Backend Repository: [KTB4_Neo_BE](https://github.com/100-hours-a-week/KTB4_Neo_BE)
 - Frontend Repository: [KTB4_Neo_FE](https://github.com/100-hours-a-week/KTB4_Neo_FE)
 
 ## 폴더 구조
@@ -117,9 +116,10 @@
   <img src="docs/diagrams/system-architecture.svg" width="100%" alt="시스템 아키텍처">
 </p>
 
-- 사용자 요청은 EC2의 Nginx를 통해 정적 프런트엔드 또는 Spring Boot API로 전달됩니다.
-- Spring Boot는 RDS MySQL에 영구 데이터를 저장하고 Redis에 임시글을 캐싱합니다.
-- 이미지는 Presigned URL을 이용해 S3에 직접 업로드합니다.
+- 페이지·REST API·SSE 요청은 EC2의 Nginx로 전달되며, `/api` 요청은 Spring Boot 컨테이너로 프록시됩니다.
+- Spring Boot는 RDS MySQL에 도메인 데이터를 영구 저장하고 EC2 내부 Redis에 임시글을 캐싱합니다.
+- 이미지 조회 요청은 CloudFront를 거쳐 S3 원본으로 전달되어 CDN 캐시를 활용합니다.
+- Spring Boot가 Presigned URL을 발급하면 브라우저가 S3로 이미지를 직접 업로드하고, 백엔드는 업로드 검증과 삭제를 담당합니다.
 - 운영 서비스는 Docker Compose 내부 네트워크에서 통신하며 외부에는 Nginx의 80번 포트만 공개합니다.
 - GitHub Actions가 이미지를 Docker Hub에 푸시하고 SSH로 EC2의 컨테이너를 갱신합니다.
 
@@ -283,4 +283,3 @@ MySQL 인덱스 역시 무조건 추가하기보다 실제 조회 조건과 실�
 Testcontainers와 부하 테스트 스크립트를 구성하면서 재현 가능한 테스트 환경이 결과의 신뢰도를 결정한다는 점을 알게 되었습니다.  
 개발 계획, API 명세, DB 설계서와 테스트 시나리오를 먼저 작성했다면 구현과 검증을 더 효율적으로 진행할 수 있었겠다는 점도 돌아보게 되었습니다.  
 앞으로는 구현 결과뿐 아니라 설계 의도와 선택 근거를 문서로 남기며, 성능과 안정성을 객관적인 테스트로 검증하는 백엔드 개발자가 되고자 합니다.
-

@@ -1,42 +1,102 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="820" viewBox="0 0 1400 820">
+<svg xmlns="http://www.w3.org/2000/svg" width="1500" height="900" viewBox="0 0 1500 900">
   <defs>
     <style>
-      .bg{fill:#0d1117}.panel{fill:#161b22;stroke:#586069;stroke-width:2}.aws{fill:#1f2937;stroke:#8b949e;stroke-width:2}.node{fill:#21262d;stroke:#c9d1d9;stroke-width:2}.store{fill:#17202a;stroke:#58a6ff;stroke-width:2}.title{fill:#f0f6fc;font:700 30px Arial,sans-serif}.label{fill:#f0f6fc;font:600 18px Arial,sans-serif}.sub{fill:#8b949e;font:15px Arial,sans-serif}.edge{stroke:#c9d1d9;stroke-width:2;fill:none;marker-end:url(#arrow)}.edge2{stroke:#58a6ff;stroke-width:2;fill:none;marker-end:url(#blue)}
+      .bg{fill:#0d1117}.aws{fill:#202a38;stroke:#8b949e;stroke-width:2}.ec2{fill:#161b22;stroke:#6e7681;stroke-width:2}.node{fill:#21262d;stroke:#c9d1d9;stroke-width:2}.redis{fill:#241b20;stroke:#f85149;stroke-width:2}.mysql{fill:#17202a;stroke:#58a6ff;stroke-width:2}.s3{fill:#1c241d;stroke:#3fb950;stroke-width:2}.title{fill:#f0f6fc;font:700 32px Arial,sans-serif}.label{fill:#f0f6fc;font:600 18px Arial,sans-serif}.sub{fill:#9da7b3;font:15px Arial,sans-serif}.edge{stroke:#c9d1d9;stroke-width:2;fill:none;marker-end:url(#arrow)}.blue{stroke:#58a6ff;stroke-width:2;fill:none;marker-end:url(#blue)}.green{stroke:#3fb950;stroke-width:2;fill:none;marker-end:url(#green)}.dash{stroke-dasharray:8 7}
     </style>
     <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#c9d1d9"/></marker>
     <marker id="blue" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#58a6ff"/></marker>
+    <marker id="green" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto"><path d="M0,0 L0,6 L9,3 z" fill="#3fb950"/></marker>
   </defs>
-  <rect class="bg" width="1400" height="820"/>
-  <text class="title" x="40" y="58">System Architecture</text>
-  <rect class="aws" x="340" y="90" width="1020" height="680" rx="18"/>
-  <text class="label" x="820" y="125">AWS</text>
-  <rect class="panel" x="385" y="165" width="630" height="535" rx="16"/>
-  <text class="label" x="675" y="200">EC2 · Docker Compose</text>
-  <rect class="node" x="470" y="250" width="220" height="115" rx="12"/>
-  <text class="label" x="548" y="290">Nginx</text><text class="sub" x="497" y="320">SPA / Reverse Proxy</text><text class="sub" x="530" y="344">SSE Proxy</text>
-  <rect class="node" x="765" y="250" width="220" height="115" rx="12"/>
-  <text class="label" x="811" y="290">Spring Boot</text><text class="sub" x="812" y="320">REST API / JWT</text><text class="sub" x="818" y="344">Docker Container</text>
-  <rect class="store" x="470" y="470" width="220" height="105" rx="12"/>
-  <text class="label" x="552" y="512">Redis 7</text><text class="sub" x="505" y="542">Draft Cache · AOF</text>
-  <rect class="node" x="765" y="470" width="220" height="105" rx="12"/>
-  <text class="label" x="808" y="512">Docker Volume</text><text class="sub" x="807" y="542">Redis / Upload Data</text>
-  <rect class="store" x="1090" y="220" width="220" height="105" rx="52"/>
-  <text class="label" x="1145" y="264">RDS MySQL</text><text class="sub" x="1140" y="293">Persistent Data</text>
-  <rect class="store" x="1090" y="430" width="220" height="105" rx="52"/>
-  <text class="label" x="1152" y="474">Amazon S3</text><text class="sub" x="1135" y="503">Image Storage</text>
-  <rect class="node" x="45" y="245" width="220" height="105" rx="12"/>
-  <text class="label" x="96" y="288">User Browser</text><text class="sub" x="83" y="318">Page · REST API · SSE</text>
-  <rect class="node" x="45" y="510" width="220" height="105" rx="12"/>
-  <text class="label" x="76" y="552">GitHub Actions</text><text class="sub" x="82" y="582">Build · Push · Deploy</text>
-  <rect class="node" x="390" y="715" width="220" height="70" rx="12"/>
-  <text class="label" x="440" y="758">Docker Hub</text>
-  <path class="edge" d="M265 297 H470"/><text class="sub" x="305" y="280">HTTP :80</text>
-  <path class="edge" d="M690 307 H765"/><text class="sub" x="700" y="290">/api</text>
-  <path class="edge2" d="M765 335 C720 375 650 420 580 470"/><text class="sub" x="650" y="405">Hash / ZSet</text>
-  <path class="edge" d="M690 522 H765"/><text class="sub" x="700" y="505">AOF Volume</text>
-  <path class="edge2" d="M985 285 H1090"/><text class="sub" x="1005" y="268">JPA/JDBC</text>
-  <path class="edge2" d="M985 340 C1040 360 1035 482 1090 482"/><text class="sub" x="1010" y="400">Presigned URL</text>
-  <path class="edge" d="M265 555 C320 555 330 750 390 750"/><text class="sub" x="280" y="650">Build &amp; Push</text>
-  <path class="edge" d="M610 750 C720 750 700 430 790 365"/><text class="sub" x="675" y="650">Pull Image</text>
-  <path class="edge" d="M265 540 C335 500 320 430 385 430"/><text class="sub" x="278" y="468">SSH Deploy</text>
+
+  <rect class="bg" width="1500" height="900"/>
+  <text class="title" x="36" y="55">Infrastructure Architecture</text>
+
+  <!-- external actors -->
+  <rect class="node" x="45" y="245" width="210" height="105" rx="12"/>
+  <text class="label" x="94" y="286">User Browser</text>
+  <text class="sub" x="77" y="318">React SPA · REST · SSE</text>
+
+  <rect class="node" x="45" y="610" width="210" height="105" rx="12"/>
+  <text class="label" x="77" y="652">GitHub Actions</text>
+  <text class="sub" x="78" y="683">Build · Push · SSH Deploy</text>
+
+  <!-- AWS boundary -->
+  <rect class="aws" x="320" y="90" width="1135" height="745" rx="18"/>
+  <text class="label" x="850" y="125">AWS</text>
+
+  <!-- EC2 boundary -->
+  <rect class="ec2" x="365" y="215" width="715" height="525" rx="16"/>
+  <text class="label" x="642" y="250">EC2 · Docker Compose</text>
+
+  <rect class="node" x="425" y="310" width="230" height="120" rx="12"/>
+  <text class="label" x="512" y="350">Nginx</text>
+  <text class="sub" x="462" y="381">React SPA Serving</text>
+  <text class="sub" x="454" y="405">Reverse Proxy · SSE</text>
+
+  <rect class="node" x="770" y="310" width="250" height="120" rx="12"/>
+  <text class="label" x="836" y="350">Spring Boot API</text>
+  <text class="sub" x="818" y="381">Java 17 · JWT · JPA</text>
+  <text class="sub" x="825" y="405">Docker Container</text>
+
+  <rect class="redis" x="770" y="535" width="250" height="115" rx="12"/>
+  <text class="label" x="846" y="575">Redis 7</text>
+  <text class="sub" x="812" y="606">Draft Hash · Dirty ZSet</text>
+  <text class="sub" x="850" y="630">AOF Volume</text>
+
+  <!-- AWS managed services -->
+  <rect class="node" x="1115" y="170" width="250" height="105" rx="12"/>
+  <text class="label" x="1184" y="211">CloudFront</text>
+  <text class="sub" x="1175" y="242">Image CDN / Cache</text>
+
+  <rect class="s3" x="1130" y="340" width="220" height="115" rx="58"/>
+  <text class="label" x="1196" y="382">Amazon S3</text>
+  <text class="sub" x="1168" y="413">Profile · Post Images</text>
+
+  <rect class="mysql" x="1130" y="540" width="220" height="115" rx="58"/>
+  <text class="label" x="1188" y="582">RDS MySQL</text>
+  <text class="sub" x="1177" y="613">Persistent Domain Data</text>
+
+  <rect class="node" x="430" y="765" width="220" height="75" rx="12"/>
+  <text class="label" x="482" y="810">Docker Hub</text>
+
+  <!-- user traffic -->
+  <path class="edge" d="M255 297 H425"/>
+  <text class="sub" x="282" y="280">Page · REST API · SSE</text>
+
+  <path class="edge" d="M655 370 H770"/>
+  <text class="sub" x="681" y="352">/api Proxy</text>
+
+  <!-- image read path: browser -> cloudfront -> s3 -->
+  <path class="green" d="M255 260 C430 145 860 150 1115 215"/>
+  <text class="sub" x="525" y="150">Image GET</text>
+
+  <path class="green" d="M1240 275 V340"/>
+  <text class="sub" x="1254" y="315">Origin</text>
+
+  <!-- application data paths -->
+  <path class="blue" d="M1020 350 C1080 360 1080 397 1130 397"/>
+  <text class="sub" x="1033" y="342">Presign · Verify · Delete</text>
+
+  <path class="green dash" d="M255 325 C500 490 900 470 1130 415"/>
+  <text class="sub" x="470" y="493">Presigned PUT Upload</text>
+
+  <path class="blue" d="M1020 395 C1090 440 1075 597 1130 597"/>
+  <text class="sub" x="1040" y="505">JPA · JDBC</text>
+
+  <path class="edge" d="M895 430 V535"/>
+  <text class="sub" x="910" y="488">Hash · ZSet · Lua</text>
+
+  <!-- deployment paths -->
+  <path class="edge" d="M255 665 C330 665 345 802 430 802"/>
+  <text class="sub" x="282" y="742">Build &amp; Push</text>
+
+  <path class="edge" d="M650 802 C735 802 700 485 820 430"/>
+  <text class="sub" x="690" y="735">Pull Backend Image</text>
+
+  <path class="edge" d="M255 640 C315 605 315 470 365 470"/>
+  <text class="sub" x="276" y="548">SSH · compose.yml</text>
+
+  <!-- legend -->
+  <text class="sub" x="1090" y="790">실선: 서비스 요청/응답 경로</text>
+  <text class="sub" x="1090" y="815">점선: Presigned URL 직접 업로드</text>
 </svg>
