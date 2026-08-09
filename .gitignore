@@ -1,0 +1,34 @@
+# Frontend is managed by the separate FE repository.
+/frontend-react/
+
+# Local environment
+/.env
+/.env.*
+!/.env.example
+
+# Local-only Compose overrides
+/compose.override.yml
+/compose.override.yaml
+
+# IDE and OS files
+/.idea/
+/.vscode/
+/.DS_Store
+*.iml
+
+# Markdown documents are local-only in this repository.
+*.md
+
+# Local package cache
+/.pnpm-store/
+
+# Local performance-test artifacts
+jmeter.log
+*.jtl
+performance-test/data/
+performance-test/results/
+performance-test/reports/
+performance-test/.DS_Store
+performance-test/sql/.DS_Store
+performance/*.md
+performance/*.sh

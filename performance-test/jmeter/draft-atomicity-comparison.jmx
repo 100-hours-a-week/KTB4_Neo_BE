@@ -1,0 +1,195 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<jmeterTestPlan version="1.2" properties="5.0" jmeter="5.6.3">
+  <hashTree>
+    <TestPlan guiclass="TestPlanGui" testclass="TestPlan" testname="Draft Atomicity Strategy Comparison">
+      <stringProp name="TestPlan.comments">JWT, MySQL, scheduler를 제외한 Lua, WATCH, RLock 비교</stringProp>
+      <elementProp name="TestPlan.user_defined_variables" elementType="Arguments" guiclass="ArgumentsPanel" testclass="Arguments" testname="Variables">
+        <collectionProp name="Arguments.arguments"/>
+      </elementProp>
+      <boolProp name="TestPlan.functional_mode">false</boolProp>
+      <boolProp name="TestPlan.serialize_threadgroups">false</boolProp>
+    </TestPlan>
+    <hashTree>
+      <ConfigTestElement guiclass="HttpDefaultsGui" testclass="ConfigTestElement" testname="HTTP Defaults">
+        <stringProp name="HTTPSampler.domain">${__P(host,localhost)}</stringProp>
+        <stringProp name="HTTPSampler.port">${__P(port,18080)}</stringProp>
+        <stringProp name="HTTPSampler.protocol">http</stringProp>
+        <stringProp name="HTTPSampler.contentEncoding">UTF-8</stringProp>
+        <stringProp name="HTTPSampler.implementation">HttpClient4</stringProp>
+        <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+          <collectionProp name="Arguments.arguments"/>
+        </elementProp>
+      </ConfigTestElement>
+      <hashTree/>
+      <HeaderManager guiclass="HeaderPanel" testclass="HeaderManager" testname="JSON Headers">
+        <collectionProp name="HeaderManager.headers">
+          <elementProp name="content-type" elementType="Header">
+            <stringProp name="Header.name">Content-Type</stringProp>
+            <stringProp name="Header.value">application/json</stringProp>
+          </elementProp>
+          <elementProp name="accept" elementType="Header">
+            <stringProp name="Header.name">Accept</stringProp>
+            <stringProp name="Header.value">application/json</stringProp>
+          </elementProp>
+        </collectionProp>
+      </HeaderManager>
+      <hashTree/>
+      <ThreadGroup guiclass="ThreadGroupGui" testclass="ThreadGroup" testname="Four Result Paths - 10 Threads Per Draft">
+        <stringProp name="ThreadGroup.num_threads">${__P(totalThreads,50)}</stringProp>
+        <stringProp name="ThreadGroup.ramp_time">${__P(ramp,10)}</stringProp>
+        <stringProp name="ThreadGroup.duration">${__P(duration,180)}</stringProp>
+        <longProp name="ThreadGroup.delay">0</longProp>
+        <boolProp name="ThreadGroup.same_user_on_next_iteration">true</boolProp>
+        <boolProp name="ThreadGroup.scheduler">true</boolProp>
+        <stringProp name="ThreadGroup.on_sample_error">continue</stringProp>
+        <elementProp name="ThreadGroup.main_controller" elementType="LoopController" guiclass="LoopControlPanel" testclass="LoopController" testname="Loop">
+          <intProp name="LoopController.loops">-1</intProp>
+          <boolProp name="LoopController.continue_forever">true</boolProp>
+        </elementProp>
+      </ThreadGroup>
+      <hashTree>
+        <JSR223PreProcessor guiclass="TestBeanGUI" testclass="JSR223PreProcessor" testname="Prepare Strategy Scenario and Body">
+          <stringProp name="scriptLanguage">groovy</stringProp>
+          <stringProp name="parameters"></stringProp>
+          <stringProp name="filename"></stringProp>
+          <stringProp name="cacheKey">true</stringProp>
+          <stringProp name="script">import java.util.concurrent.atomic.AtomicLong
+
+int perScenario = Integer.parseInt(props.getProperty('threadsPerScenario', '10'))
+int group = Math.floorDiv(ctx.getThreadNum(), perScenario)
+String strategy = props.getProperty('strategy', 'LUA').toUpperCase()
+long version
+long fallbackVersion = 10L
+String content
+String expected
+long draftId
+String pathSuffix = 'autosave'
+String httpMethod = 'PUT'
+
+switch (group) {
+    case 0:
+        draftId = 201L
+        AtomicLong sequence = (AtomicLong) props.computeIfAbsent(
+            'savedVersion',
+            key -&gt; new AtomicLong(10L)
+        )
+        version = sequence.incrementAndGet()
+        content = 'saved-' + version
+        expected = 'SAVED_OR_VERSION_CONFLICT'
+        break
+    case 1:
+        draftId = 202L
+        version = 10L
+        content = 'idempotent'
+        expected = 'IDEMPOTENT'
+        break
+    case 2:
+        draftId = 203L
+        version = 19L
+        fallbackVersion = 20L
+        content = 'stale'
+        expected = 'VERSION_CONFLICT'
+        break
+    case 3:
+        draftId = 204L
+        version = 20L
+        fallbackVersion = 20L
+        content = 'conflicting-' + ctx.getThreadNum()
+        expected = 'CONTENT_CONFLICT'
+        break
+    default:
+        draftId = 205L
+        version = 10L
+        content = 'dirty'
+        expected = 'DIRTY_EQUAL'
+        pathSuffix = 'remove-dirty-cycle'
+        httpMethod = 'POST'
+}
+
+vars.put('strategy', strategy)
+vars.put('draftId', Long.toString(draftId))
+vars.put('expectedStatus', expected)
+vars.put('pathSuffix', pathSuffix)
+vars.put('httpMethod', httpMethod)
+vars.put('requestBody', expected == 'DIRTY_EQUAL'
+  ? groovy.json.JsonOutput.toJson([rdbContentVersion: 10])
+  : groovy.json.JsonOutput.toJson([
+    title: content,
+    postBody: 'body-' + content,
+    postImage: '',
+    contentVersion: version,
+    updatedAt: '2026-08-08T12:00:00',
+    fallbackTitle: group == 1 ? 'idempotent' : (group &gt;= 2 ? 'stored' : 'base'),
+    fallbackPostBody: group == 1 ? 'body-idempotent' : (group &gt;= 2 ? 'body-stored' : 'body-base'),
+    fallbackPostImage: '',
+    fallbackContentVersion: fallbackVersion,
+    fallbackUpdatedAt: '2026-08-08T11:00:00',
+    dirtyScore: System.currentTimeMillis()
+]))</stringProp>
+        </JSR223PreProcessor>
+        <hashTree/>
+        <HTTPSamplerProxy guiclass="HttpTestSampleGui" testclass="HTTPSamplerProxy" testname="AUTOSAVE">
+          <stringProp name="HTTPSampler.path">/api/perf/redis/drafts/${strategy}/${draftId}/${pathSuffix}</stringProp>
+          <boolProp name="HTTPSampler.follow_redirects">true</boolProp>
+          <stringProp name="HTTPSampler.method">${httpMethod}</stringProp>
+          <boolProp name="HTTPSampler.use_keepalive">true</boolProp>
+          <boolProp name="HTTPSampler.postBodyRaw">true</boolProp>
+          <elementProp name="HTTPsampler.Arguments" elementType="Arguments">
+            <collectionProp name="Arguments.arguments">
+              <elementProp name="" elementType="HTTPArgument">
+                <boolProp name="HTTPArgument.always_encode">false</boolProp>
+                <stringProp name="Argument.value">${requestBody}</stringProp>
+                <stringProp name="Argument.metadata">=</stringProp>
+              </elementProp>
+            </collectionProp>
+          </elementProp>
+        </HTTPSamplerProxy>
+        <hashTree>
+          <ResponseAssertion guiclass="AssertionGui" testclass="ResponseAssertion" testname="HTTP 200">
+            <collectionProp name="Asserion.test_strings">
+              <stringProp name="200">200</stringProp>
+            </collectionProp>
+            <stringProp name="Assertion.test_field">Assertion.response_code</stringProp>
+            <boolProp name="Assertion.assume_success">false</boolProp>
+            <intProp name="Assertion.test_type">8</intProp>
+          </ResponseAssertion>
+          <hashTree/>
+          <JSR223PostProcessor guiclass="TestBeanGUI" testclass="JSR223PostProcessor" testname="Classify Result">
+            <stringProp name="scriptLanguage">groovy</stringProp>
+            <stringProp name="parameters"></stringProp>
+            <stringProp name="filename"></stringProp>
+            <stringProp name="cacheKey">true</stringProp>
+            <stringProp name="script">import groovy.json.JsonSlurper
+
+try {
+    def body = new JsonSlurper().parseText(prev.getResponseDataAsString())
+    if (vars.get('expectedStatus') == 'DIRTY_EQUAL') {
+        prev.setSampleLabel(vars.get('strategy') + '_DIRTY_EQUAL')
+        if (body.removed != true) {
+            prev.setSuccessful(false)
+            prev.setResponseMessage('Dirty entry was not removed')
+        }
+        return
+    }
+    String status = body.status as String
+    prev.setSampleLabel(vars.get('strategy') + '_' + status)
+    String expected = vars.get('expectedStatus')
+    boolean valid = expected == status ||
+        (expected == 'SAVED_OR_VERSION_CONFLICT' &amp;&amp;
+            (status == 'SAVED' || status == 'VERSION_CONFLICT' || status == 'WATCH_RETRY_EXHAUSTED'))
+    if (!valid) {
+        prev.setSuccessful(false)
+        prev.setResponseMessage('Unexpected status: expected=' + expected + ', actual=' + status)
+    }
+} catch (Exception error) {
+    prev.setSuccessful(false)
+    prev.setSampleLabel(vars.get('strategy') + '_INVALID_RESPONSE')
+    prev.setResponseMessage(error.toString())
+}</stringProp>
+          </JSR223PostProcessor>
+          <hashTree/>
+        </hashTree>
+      </hashTree>
+    </hashTree>
+  </hashTree>
+</jmeterTestPlan>

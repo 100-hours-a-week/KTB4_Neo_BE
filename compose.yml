@@ -1,0 +1,151 @@
+# 이 Compose 프로젝트의 이름이다.
+# 생성되는 네트워크와 Volume 이름에 사용된다.
+name: community
+
+services:
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+
+    # AOF를 사용해 컨테이너 재시작 후에도 최신 Draft 버퍼를 복구한다.
+    command: ["redis-server", "--appendonly", "yes"]
+
+    volumes:
+      - redis-data:/data
+
+    expose:
+      - "6379"
+
+    networks:
+      - community-network
+
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend:
+    image: ${DOCKER_USERNAME}/ktb-community-be:latest
+
+    # 백엔드 컨테이너가 사용할 수 있는 최대 메모리
+    mem_limit: 640m
+
+    # 컨테이너가 비정상 종료되거나 Docker가 재시작되면 다시 실행한다.
+    restart: unless-stopped
+
+    # 프로젝트 루트의 실제 환경변수 파일을 읽는다.
+    env_file:
+      - .env
+
+    environment:
+      # 운영에서는 EC2의 .env에 있는 RDS 접속 정보를 사용한다.
+      SPRING_PROFILES_ACTIVE: "${SPRING_PROFILES_ACTIVE:-prod}"
+      DB_URL: "${DB_URL}"
+      DB_USERNAME: "${DB_USERNAME}"
+      DB_PASSWORD: "${DB_PASSWORD}"
+      DB_MAX_POOL_SIZE: "${DB_MAX_POOL_SIZE:-10}"
+      DB_MIN_IDLE: "${DB_MIN_IDLE:-2}"
+
+      # Compose 내부 Redis 서비스에 연결한다.
+      REDIS_HOST: "redis"
+      REDIS_PORT: "6379"
+
+      AWS_REGION: "${AWS_REGION}"
+      S3_BUCKET_NAME: "${S3_BUCKET_NAME}"
+      S3_PUBLIC_BASE_URL: "${S3_PUBLIC_BASE_URL}"
+      S3_PRESIGNED_URL_EXPIRATION_SECONDS: "${S3_PRESIGNED_URL_EXPIRATION_SECONDS:-300}"
+      S3_UPLOAD_SESSION_TTL_SECONDS: "${S3_UPLOAD_SESSION_TTL_SECONDS:-600}"
+      S3_MAX_IMAGE_SIZE: "${S3_MAX_IMAGE_SIZE:-10485760}"
+
+    depends_on:
+      redis:
+        condition: service_healthy
+
+    volumes:
+      # 업로드 이미지가 컨테이너 재생성 후에도 남도록 한다.
+      - backend-uploads:/app/uploads
+
+    # 다른 Compose 컨테이너에만 8080 포트를 알린다.
+    # EC2 외부에는 8080을 공개하지 않는다.
+    expose:
+      - "8080"
+
+    networks:
+      # frontend와 통신할 내부 네트워크
+      - community-network
+
+    healthcheck:
+      # Spring의 8080 TCP 포트가 열렸는지 검사한다.
+      # 루트 요청은 401이므로 HTTP 상태 대신 TCP 연결 여부를 확인한다.
+      test:
+        [
+          "CMD-SHELL",
+          "bash -c '</dev/tcp/127.0.0.1/8080'"
+        ]
+
+      # 10초마다 검사
+      interval: 10s
+
+      # 한 번 검사할 때 3초까지 기다림
+      timeout: 3s
+
+      # 5번 연속 실패하면 unhealthy
+      retries: 5
+
+      # Spring 초기 실행에 30초의 준비 시간을 준다.
+      start_period: 30s
+
+    logging:
+      # Docker 기본 JSON 로그 드라이버
+      driver: json-file
+
+      options:
+        # 로그 파일 하나의 최대 크기
+        max-size: "10m"
+
+        # 최대 3개까지만 보관
+        max-file: "3"
+
+  frontend:
+    image: ${DOCKER_USERNAME}/ktb-community-frontend:latest
+
+    # backend가 healthy 상태가 된 후 frontend를 시작한다.
+    depends_on:
+      backend:
+        condition: service_healthy
+
+    # EC2의 80번 포트를 Nginx 컨테이너 80번에 연결한다.
+    ports:
+      - "80:80"
+
+    # Docker 재시작 후에도 자동으로 다시 실행한다.
+    restart: unless-stopped
+
+    networks:
+      # backend와 같은 네트워크에 연결한다.
+      - community-network
+
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  # 업로드 이미지 영구 저장용 Docker Volume
+  backend-uploads:
+
+  # Redis AOF 데이터 영구 저장용 Docker Volume
+  redis-data:
+
+networks:
+  # frontend와 backend만 통신하는 Bridge 네트워크
+  community-network:
+    driver: bridge
