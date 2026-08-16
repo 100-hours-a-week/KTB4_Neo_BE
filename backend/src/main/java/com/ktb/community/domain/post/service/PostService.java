@@ -108,7 +108,7 @@ public class PostService {
                 .orElseThrow(() -> new ApiException(ErrorCode.POST_NOT_FOUND));
 
         return new PostDetailResponseDto(
-                post,
+                responsePost,
                 isLiked,
                 isViewCounted,
                 post.isBlinded(),
