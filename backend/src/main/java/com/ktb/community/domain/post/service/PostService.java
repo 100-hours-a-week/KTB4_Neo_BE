@@ -104,6 +104,9 @@ public class PostService {
         boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, userId);
         int viewCount = postRepository.findViewCount(postId);
 
+        Post responsePost = postRepository.findById(postId)
+                .orElseThrow(() -> new ApiException(ErrorCode.POST_NOT_FOUND));
+
         return new PostDetailResponseDto(
                 post,
                 isLiked,
