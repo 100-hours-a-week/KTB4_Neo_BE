@@ -59,7 +59,7 @@ public interface PostRepository extends JpaRepository<Post, Long> {
             """)
     int decreaseComments(@Param("postId") Long postId);
 
-    @Modifying(flushAutomatically = true)
+    @Modifying(flushAutomatically = true, clearAutomatically = true)
     @Query("""
             update Post p
             set p.views = p.views + 1
@@ -75,4 +75,12 @@ public interface PostRepository extends JpaRepository<Post, Long> {
               and p.deleted = false
             """)
     int findLikeCount(@Param("postId") Long postId);
+
+    @Query("""
+        select p.views
+        from Post p
+        where p.postId = :postId
+        and p.deleted = false
+        """)
+    int findViewCount(@Param("postId") Long postId);
 }

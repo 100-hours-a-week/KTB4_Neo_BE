@@ -12,11 +12,11 @@ public class PostDetailResponseDto {
     private AuthorInfo author;
     private MetaInfo meta;
 
-    public PostDetailResponseDto(Post post, boolean isLiked, boolean isViewCounted, boolean isBlinded) {
+    public PostDetailResponseDto(Post post, boolean isLiked, boolean isViewCounted, boolean isBlinded, int viewCount) {
 
         this.post = new PostInfo(post);
         this.author = new AuthorInfo(post);
-        this.meta = new MetaInfo(post, isLiked, isViewCounted, isBlinded);
+        this.meta = new MetaInfo(post, isLiked, isViewCounted, isBlinded, viewCount);
     }
 
     @Getter
@@ -67,9 +67,9 @@ public class PostDetailResponseDto {
         private boolean isViewCounted;
         private boolean isBlinded;
 
-        public MetaInfo(Post post, boolean isLiked, boolean isViewCounted, boolean isBlinded) {
+        public MetaInfo(Post post, boolean isLiked, boolean isViewCounted, boolean isBlinded, int viewCount) {
             this.likes = post.getLikes();
-            this.views = post.getViews();
+            this.views = viewCount;
             this.comments = post.getComments();
             this.isLiked = isLiked;
             this.isViewCounted = isViewCounted;

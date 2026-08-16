@@ -102,12 +102,14 @@ public class PostService {
 
         boolean isViewCounted = increaseViewIfNeeded(userId, post);
         boolean isLiked = postLikeRepository.existsByPostIdAndUserId(postId, userId);
+        int viewCount = postRepository.findViewCount(postId);
 
         return new PostDetailResponseDto(
                 post,
                 isLiked,
                 isViewCounted,
-                post.isBlinded()
+                post.isBlinded(),
+                viewCount
         );
     }
 
