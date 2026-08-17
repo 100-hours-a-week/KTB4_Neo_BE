@@ -8,6 +8,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.data.redis.core.HashOperations;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.data.redis.core.script.DefaultRedisScript;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
@@ -16,6 +17,8 @@ import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -41,7 +44,7 @@ class DraftRedisRepositoryTest {
     }
 
     @Test
-    void saveInitialStoresOwnerIdInTheDraftHash() {
+    void saveInitialStoresDraftFieldsAndTtlInOneScript() {
         LocalDateTime updatedAt = LocalDateTime.parse("2026-08-17T18:00:00");
         DraftCache cache = new DraftCache(
                 11L,
@@ -52,25 +55,67 @@ class DraftRedisRepositoryTest {
                 1L,
                 updatedAt
         );
-        when(redisTemplate.expire(eq("draft:11"), eq(Duration.ofDays(3))))
-                .thenReturn(true);
+        when(redisTemplate.execute(
+                any(DefaultRedisScript.class),
+                eq(java.util.List.of("draft:11")),
+                any(Object[].class)
+        )).thenReturn(1L);
 
         draftRedisRepository.saveInitial(cache);
 
-        ArgumentCaptor<Map<Object, Object>> valuesCaptor =
-                ArgumentCaptor.forClass(Map.class);
-        verify(hashOperations).putAll(
-                eq("draft:11"),
-                valuesCaptor.capture()
+        ArgumentCaptor<Object[]> argumentsCaptor =
+                ArgumentCaptor.forClass(Object[].class);
+        verify(redisTemplate).execute(
+                any(DefaultRedisScript.class),
+                eq(java.util.List.of("draft:11")),
+                argumentsCaptor.capture()
         );
 
-        assertThat(valuesCaptor.getValue())
-                .containsEntry("ownerId", "7");
-        assertThat(valuesCaptor.getValue())
-                .containsEntry(
-                        "updatedAt",
-                        Long.toString(toEpochMillis(updatedAt))
+        assertThat(argumentsCaptor.getValue())
+                .containsExactly(
+                        "11",
+                        "7",
+                        "title",
+                        "body",
+                        "",
+                        "1",
+                        Long.toString(toEpochMillis(updatedAt)),
+                        "259200"
                 );
+    }
+
+    @Test
+    void saveInitialUsesOneRedisScriptForHashAndTtl() {
+        DraftCache cache = new DraftCache(
+                11L,
+                7L,
+                "title",
+                "body",
+                null,
+                1L,
+                LocalDateTime.parse("2026-08-17T18:00:00")
+        );
+        when(redisTemplate.execute(
+                any(DefaultRedisScript.class),
+                eq(java.util.List.of("draft:11")),
+                any(Object[].class)
+        )).thenReturn(1L);
+
+        draftRedisRepository.saveInitial(cache);
+
+        verify(redisTemplate).execute(
+                any(DefaultRedisScript.class),
+                eq(java.util.List.of("draft:11")),
+                any(Object[].class)
+        );
+        verify(hashOperations, never()).putAll(
+                eq("draft:11"),
+                any(Map.class)
+        );
+        verify(redisTemplate, never()).expire(
+                eq("draft:11"),
+                eq(Duration.ofDays(3))
+        );
     }
 
     @Test

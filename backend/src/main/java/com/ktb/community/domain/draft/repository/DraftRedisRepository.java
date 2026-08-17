@@ -13,7 +13,6 @@ import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -36,6 +35,7 @@ public class DraftRedisRepository {
     private final HashOperations<String, String, String> hashOperations;
     private final Duration redisTtl;
 
+    private final DefaultRedisScript<Long> initialSaveScript;
     private final DefaultRedisScript<List> autosaveScript;
     private final DefaultRedisScript<Long> removeDirtyScript;
 
@@ -50,6 +50,7 @@ public class DraftRedisRepository {
                 redisTemplate.opsForHash();
         this.redisTtl = redisTtl;
 
+        this.initialSaveScript = createInitialSaveScript();
         this.autosaveScript = createAutosaveScript();
 
         this.removeDirtyScript =
@@ -81,23 +82,28 @@ public class DraftRedisRepository {
     public void saveInitial(DraftCache cache) {
         String key = draftKey(cache.draftId());
 
-        redisTemplate
-                .opsForHash()
-                .putAll(
-                        key,
-                        toHash(cache)
+        long ttlSeconds = redisTtl.toSeconds();
+
+        if (ttlSeconds < 1) {
+            throw new IllegalStateException("Draft Redis TTL must be positive");
+        }
+
+        Long result =
+                redisTemplate.execute(
+                        initialSaveScript,
+                        List.of(key),
+                        cache.draftId().toString(),
+                        requireOwnerId(cache),
+                        cache.title(),
+                        cache.postBody(),
+                        encodeImage(cache.postImage()),
+                        Long.toString(cache.contentVersion()),
+                        Long.toString(toEpochMillis(cache.updatedAt())),
+                        Long.toString(ttlSeconds)
                 );
 
-        Boolean expirationApplied =
-                redisTemplate.expire(
-                        key,
-                        redisTtl
-                );
-
-        if (!Boolean.TRUE.equals(expirationApplied)) {
-            redisTemplate.delete(key);
-
-            throw new IllegalStateException("Failed to apply TTL to draft cache");
+        if (result == null || result != 1L) {
+            throw new IllegalStateException("Failed to save initial draft cache");
         }
     }
 
@@ -144,25 +150,6 @@ public class DraftRedisRepository {
     public void deleteAll(Long draftId) {
         deleteDraft(draftId);
         removeDirty(draftId);
-    }
-
-    private Map<String, String> toHash(
-            DraftCache cache
-    ) {
-        Map<String, String> values = new LinkedHashMap<>();
-
-        values.put(FIELD_DRAFT_ID, cache.draftId().toString());
-        values.put(FIELD_OWNER_ID, requireOwnerId(cache));
-        values.put(FIELD_TITLE, cache.title());
-        values.put(FIELD_POST_BODY, cache.postBody());
-        values.put(FIELD_POST_IMAGE, encodeImage(cache.postImage()));
-        values.put(FIELD_CONTENT_VERSION, Long.toString(cache.contentVersion()));
-        values.put(
-                FIELD_UPDATED_AT,
-                Long.toString(toEpochMillis(cache.updatedAt()))
-        );
-
-        return values;
     }
 
     private DraftCache toDraftCache(
@@ -494,6 +481,16 @@ public class DraftRedisRepository {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
 
         script.setLocation(new ClassPathResource("redis/draft-remove-dirty.lua"));
+
+        script.setResultType(Long.class);
+
+        return script;
+    }
+
+    private DefaultRedisScript<Long> createInitialSaveScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+
+        script.setLocation(new ClassPathResource("redis/draft-initial-save.lua"));
 
         script.setResultType(Long.class);
 
