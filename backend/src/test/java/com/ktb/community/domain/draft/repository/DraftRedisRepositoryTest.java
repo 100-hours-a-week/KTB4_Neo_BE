@@ -11,7 +11,6 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 
 import java.time.Duration;
 import java.time.LocalDateTime;
-import java.time.ZoneId;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -42,7 +41,6 @@ class DraftRedisRepositoryTest {
 
     @Test
     void saveInitialStoresOwnerIdInTheDraftHash() {
-        LocalDateTime updatedAt = LocalDateTime.parse("2026-08-17T18:00:00");
         DraftCache cache = new DraftCache(
                 11L,
                 7L,
@@ -50,7 +48,7 @@ class DraftRedisRepositoryTest {
                 "body",
                 null,
                 1L,
-                updatedAt
+                LocalDateTime.parse("2026-08-17T18:00:00")
         );
         when(redisTemplate.expire(eq("draft:11"), eq(Duration.ofDays(3))))
                 .thenReturn(true);
@@ -66,16 +64,10 @@ class DraftRedisRepositoryTest {
 
         assertThat(valuesCaptor.getValue())
                 .containsEntry("ownerId", "7");
-        assertThat(valuesCaptor.getValue())
-                .containsEntry(
-                        "updatedAt",
-                        Long.toString(toEpochMillis(updatedAt))
-                );
     }
 
     @Test
     void findByIdReadsOwnerIdFromTheDraftHash() {
-        LocalDateTime updatedAt = LocalDateTime.parse("2026-08-17T18:00:00");
         when(hashOperations.entries("draft:11"))
                 .thenReturn(Map.of(
                         "draftId", "11",
@@ -84,7 +76,7 @@ class DraftRedisRepositoryTest {
                         "postBody", "body",
                         "postImage", "",
                         "contentVersion", "1",
-                        "updatedAt", Long.toString(toEpochMillis(updatedAt))
+                        "updatedAt", "2026-08-17T18:00:00"
                 ));
 
         DraftCache cache = draftRedisRepository
@@ -92,12 +84,5 @@ class DraftRedisRepositoryTest {
                 .orElseThrow();
 
         assertThat(cache.ownerId()).isEqualTo(7L);
-        assertThat(cache.updatedAt()).isEqualTo(updatedAt);
-    }
-
-    private long toEpochMillis(LocalDateTime value) {
-        return value.atZone(ZoneId.systemDefault())
-                .toInstant()
-                .toEpochMilli();
     }
 }
