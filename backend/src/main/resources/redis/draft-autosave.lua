@@ -1,27 +1,32 @@
 -- 원자적 자동 저장을 위한 Lua Script
--- 사용자가 게시글 작성 폼에서 공백이 아닌 입력을 한 후, 2초동안 아무런 입력 없다면 자동 저장이 실행된다.
+-- Redis에 소유자 정보가 있는 일반 경로는 RDB fallback 없이 처리하고,
+-- 캐시가 없거나 ownerId가 없는 경우에만 status 5로 RDB fallback을 요청한다.
 
 local draftKey = KEYS[1]
 local dirtyKey = KEYS[2]
 
 local draftId = ARGV[1]
 
-local requestTitle = ARGV[2]
-local requestPostBody = ARGV[3]
-local requestPostImage = ARGV[4]
-local requestContentVersion = tonumber(ARGV[5])
+local requestOwnerId = ARGV[2]
+local requestTitle = ARGV[3]
+local requestPostBody = ARGV[4]
+local requestPostImage = ARGV[5]
+local requestContentVersion = tonumber(ARGV[6])
 
-local fallbackTitle = ARGV[6]
-local fallbackPostBody = ARGV[7]
-local fallbackPostImage = ARGV[8]
-local fallbackContentVersion = tonumber(ARGV[9])
-local fallbackUpdatedAt = ARGV[10]
+local fallbackOwnerId = ARGV[7]
+local hasFallback = fallbackOwnerId ~= nil and fallbackOwnerId ~= ""
+local fallbackTitle = ARGV[8]
+local fallbackPostBody = ARGV[9]
+local fallbackPostImage = ARGV[10]
+local fallbackContentVersion = hasFallback and tonumber(ARGV[11]) or nil
+local fallbackUpdatedAt = ARGV[12]
 
-local requestUpdatedAt = ARGV[11]
-local ttlSeconds = tonumber(ARGV[12])
-local dirtyScore = tonumber(ARGV[13])
+local requestUpdatedAt = ARGV[13]
+local ttlSeconds = tonumber(ARGV[14])
+local dirtyScore = tonumber(ARGV[15])
 
 local FIELD_DRAFT_ID = "draftId"
+local FIELD_OWNER_ID = "ownerId"
 local FIELD_TITLE = "title"
 local FIELD_POST_BODY = "postBody"
 local FIELD_POST_IMAGE = "postImage"
@@ -46,15 +51,112 @@ local function result(
     }
 end
 
+local function writeCache(
+    ownerId,
+    title,
+    postBody,
+    postImage,
+    contentVersion,
+    updatedAt
+)
+    redis.call(
+        "HSET",
+        draftKey,
+        FIELD_DRAFT_ID,
+        draftId,
+        FIELD_OWNER_ID,
+        ownerId,
+        FIELD_TITLE,
+        title,
+        FIELD_POST_BODY,
+        postBody,
+        FIELD_POST_IMAGE,
+        postImage,
+        FIELD_CONTENT_VERSION,
+        tostring(contentVersion),
+        FIELD_UPDATED_AT,
+        updatedAt
+    )
+end
+
 local draftExists =
     redis.call("EXISTS", draftKey) == 1
 
+local storedOwnerId
 local storedTitle
 local storedPostBody
 local storedPostImage
 local storedContentVersion
 local storedUpdatedAt
 local usingFallback = false
+local ownerNeedsRepair = false
+
+if draftExists then
+    storedOwnerId = redis.call(
+        "HGET",
+        draftKey,
+        FIELD_OWNER_ID
+    )
+
+    -- ownerId가 없는 기존 Hash는 RDB에서 소유권을 확인해야 한다.
+    if not storedOwnerId then
+        if not hasFallback then
+            return result(
+                5,
+                requestTitle,
+                requestPostBody,
+                requestPostImage,
+                requestContentVersion,
+                requestUpdatedAt
+            )
+        end
+
+        if fallbackOwnerId ~= requestOwnerId then
+            return result(
+                6,
+                requestTitle,
+                requestPostBody,
+                requestPostImage,
+                requestContentVersion,
+                requestUpdatedAt
+            )
+        end
+
+        ownerNeedsRepair = true
+    elseif storedOwnerId ~= requestOwnerId then
+        -- 다른 사용자의 Draft임을 알리지 않기 위해 실제 내용은 반환하지 않는다.
+        return result(
+            6,
+            requestTitle,
+            requestPostBody,
+            requestPostImage,
+            requestContentVersion,
+            requestUpdatedAt
+        )
+    end
+else
+    if not hasFallback then
+        return result(
+            5,
+            requestTitle,
+            requestPostBody,
+            requestPostImage,
+            requestContentVersion,
+            requestUpdatedAt
+        )
+    end
+
+    if fallbackOwnerId ~= requestOwnerId then
+        return result(
+            6,
+            requestTitle,
+            requestPostBody,
+            requestPostImage,
+            requestContentVersion,
+            requestUpdatedAt
+        )
+    end
+end
 
 if draftExists then
     storedTitle = redis.call(
@@ -89,32 +191,48 @@ if draftExists then
         FIELD_UPDATED_AT
     )
 
-    -- Redis가 존재하더라도 RDB fallback보다 버전이 낮은 경우
-    -- RDB 데이터의 버전을 자동 저장 요청에 들어온 임시글의 버전과 비교하는 기준으로 삼는다.
-    if fallbackContentVersion
-            > storedContentVersion then
+    -- Redis가 존재하더라도 RDB fallback보다 버전이 낮으면
+    -- RDB 데이터를 비교 기준으로 사용한다.
+    if hasFallback
+            and fallbackContentVersion > storedContentVersion then
         storedTitle = fallbackTitle
         storedPostBody = fallbackPostBody
         storedPostImage = fallbackPostImage
-        storedContentVersion =
-            fallbackContentVersion
-        storedUpdatedAt =
-            fallbackUpdatedAt
+        storedContentVersion = fallbackContentVersion
+        storedUpdatedAt = fallbackUpdatedAt
         usingFallback = true
     end
 else
     storedTitle = fallbackTitle
     storedPostBody = fallbackPostBody
     storedPostImage = fallbackPostImage
-    storedContentVersion =
-        fallbackContentVersion
+    storedContentVersion = fallbackContentVersion
     storedUpdatedAt = fallbackUpdatedAt
+end
+
+local function repairOwner()
+    if ownerNeedsRepair then
+        redis.call(
+            "HSET",
+            draftKey,
+            FIELD_OWNER_ID,
+            requestOwnerId
+        )
+
+        redis.call(
+            "EXPIRE",
+            draftKey,
+            ttlSeconds
+        )
+    end
 end
 
 if requestContentVersion
         < storedContentVersion then
+    repairOwner()
+
     return result(
-        3,  -- 요청 Draft가 저장된 Draft 보다 낮은 버전인 경우, Redis 수정 x
+        3,  -- 요청 Draft가 저장된 Draft보다 낮은 버전인 경우, 내용은 수정하지 않는다.
         storedTitle,
         storedPostBody,
         storedPostImage,
@@ -141,38 +259,28 @@ if requestContentVersion
             and samePostBody
             and samePostImage then
 
-        -- Redis에 없고 RDB에 동일한 버전 + 내용의 Draft 존재하는 경우
-        -- RDB 데이터를 Redis 캐시로 복구
         if not draftExists
-                or usingFallback then
-            redis.call(
-                "HSET",
-                draftKey,
-                FIELD_DRAFT_ID,
-                draftId,
-                FIELD_TITLE,
+                or usingFallback
+                or ownerNeedsRepair then
+            writeCache(
+                requestOwnerId,
                 storedTitle,
-                FIELD_POST_BODY,
                 storedPostBody,
-                FIELD_POST_IMAGE,
                 storedPostImage,
-                FIELD_CONTENT_VERSION,
-                tostring(
-                    storedContentVersion
-                ),
-                FIELD_UPDATED_AT,
+                storedContentVersion,
                 storedUpdatedAt
-            )
-
-            redis.call(
-                "EXPIRE",
-                draftKey,
-                ttlSeconds
             )
         end
 
+        -- 같은 내용을 재전송해도 활성 Draft의 sliding TTL을 연장한다.
+        redis.call(
+            "EXPIRE",
+            draftKey,
+            ttlSeconds
+        )
+
         return result(
-            2,  -- 버전도 같고, 내용도 같음 -> 멱등
+            2,  -- 버전과 내용이 같음 -> 멱등
             storedTitle,
             storedPostBody,
             storedPostImage,
@@ -181,8 +289,10 @@ if requestContentVersion
         )
     end
 
+    repairOwner()
+
     return result(
-        4,  -- 버전이 같은데 내용이 다른 경우 -> CONTENT CONFLICT 충돌 발생, Redis 건들지 않아도 됨.
+        4,  -- 버전이 같은데 내용이 다름 -> CONTENT CONFLICT
         storedTitle,
         storedPostBody,
         storedPostImage,
@@ -191,33 +301,22 @@ if requestContentVersion
     )
 end
 
--- 앞의 두 조건을 통과한 경우, 즉 요청 버전이 저장 버전보다 높은 경우
--- Redis Draft Hash 캐시 갱신
-redis.call(
-    "HSET",
-    draftKey,
-    FIELD_DRAFT_ID,
-    draftId,
-    FIELD_TITLE,
+-- 앞의 두 조건을 통과한 경우, 요청 버전이 저장 버전보다 높은 경우
+writeCache(
+    requestOwnerId,
     requestTitle,
-    FIELD_POST_BODY,
     requestPostBody,
-    FIELD_POST_IMAGE,
     requestPostImage,
-    FIELD_CONTENT_VERSION,
-    tostring(requestContentVersion),
-    FIELD_UPDATED_AT,
+    requestContentVersion,
     requestUpdatedAt
 )
 
--- TTL 갱신
 redis.call(
     "EXPIRE",
     draftKey,
     ttlSeconds
 )
 
--- Dirty 등록
 redis.call(
     "ZADD",
     dirtyKey,

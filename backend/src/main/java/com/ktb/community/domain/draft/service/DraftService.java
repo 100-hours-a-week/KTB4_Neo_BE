@@ -12,6 +12,7 @@ import com.ktb.community.domain.post.repository.PostRepository;
 import com.ktb.community.domain.draft.repository.DraftCache;
 import com.ktb.community.domain.draft.repository.DraftRedisRepository;
 import com.ktb.community.domain.draft.repository.DraftRedisSaveResult;
+import com.ktb.community.domain.draft.repository.DraftRedisSaveStatus;
 import com.ktb.community.domain.draft.repository.DraftRepository;
 import com.ktb.community.domain.user.entity.User;
 import com.ktb.community.domain.user.repository.UserRepository;
@@ -25,6 +26,7 @@ import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 import java.time.LocalDateTime;
+import java.util.Objects;
 import java.util.Optional;
 
 @Slf4j
@@ -115,17 +117,42 @@ public class DraftService {
 
     @Transactional(readOnly = true)
     public DraftAutosaveResponseDto autosaveDraft(Long userId, Long draftId, DraftRequestDto request) {
-        Draft draft = getOwnedActiveDraft(userId, draftId);
-
         LocalDateTime requestedAt = LocalDateTime.now();
 
-        DraftCache requestCache = toRequestCache(draft, request, requestedAt);
+        DraftCache requestCache = toRequestCache(
+                userId,
+                draftId,
+                request,
+                requestedAt
+        );
 
-        DraftCache rdbFallback = toRdbCache(draft);
-
-        DraftRedisSaveResult result = draftRedisRepository.saveIfNewer(requestCache, rdbFallback);
+        DraftRedisSaveResult result = saveAutosaveCache(
+                userId,
+                draftId,
+                requestCache
+        );
 
         return handleAutosaveResult(result);
+    }
+
+    private DraftRedisSaveResult saveAutosaveCache(
+            Long userId,
+            Long draftId,
+            DraftCache requestCache
+    ) {
+        DraftRedisSaveResult result =
+                draftRedisRepository.saveIfNewer(requestCache);
+
+        if (result.status() != DraftRedisSaveStatus.FALLBACK_REQUIRED) {
+            return result;
+        }
+
+        Draft draft = getOwnedActiveDraft(userId, draftId);
+
+        return draftRedisRepository.saveIfNewer(
+                requestCache,
+                toRdbCache(draft)
+        );
     }
 
     public DraftResponseDto saveDraft(Long userId, Long draftId, DraftRequestDto request) {
@@ -135,7 +162,8 @@ public class DraftService {
 
         DraftCache requestCache =
                 toRequestCache(
-                        draft,
+                        draft.getActiveOwnerId(),
+                        draft.getDraftId(),
                         request,
                         requestedAt
                 );
@@ -252,6 +280,7 @@ public class DraftService {
     private DraftCache toPublishRequestCache(Draft draft, DraftPublishRequestDto request, LocalDateTime requestedAt) {
         return new DraftCache(
                 draft.getDraftId(),
+                draft.getActiveOwnerId(),
                 request.getTitle(),
                 request.getPostBody(),
                 request.getPostImage(),
@@ -343,6 +372,7 @@ public class DraftService {
     private DraftCache toRdbCache(Draft draft) {
         return new DraftCache(
                 draft.getDraftId(),
+                draft.getActiveOwnerId(),
                 draft.getTitle(),
                 draft.getPostBody(),
                 draft.getPostImage(),
@@ -381,12 +411,26 @@ public class DraftService {
                 draftRedisRepository.findById(draft.getDraftId());
 
         if (redisCacheOptional.isEmpty()) {
-            restoreRedisFromRdb(rdbCache);
+            restoreRedisCache(rdbCache);
 
             return toResponse(draft, rdbCache);
         }
 
         DraftCache redisCache = redisCacheOptional.get();
+
+        if (redisCache.ownerId() == null) {
+            redisCache = redisCache.withOwnerId(rdbCache.ownerId());
+            restoreRedisCache(redisCache);
+        }
+
+        if (!Objects.equals(
+                redisCache.ownerId(),
+                rdbCache.ownerId()
+        )) {
+            replaceRedisWithRdb(rdbCache);
+
+            return toResponse(draft, rdbCache);
+        }
 
         if (redisCache.contentVersion() > rdbCache.contentVersion()) {
             return toResponse(draft, redisCache);
@@ -411,13 +455,13 @@ public class DraftService {
         return toResponse(draft, latestTimestampCache);
     }
 
-    private void restoreRedisFromRdb(DraftCache rdbCache) {
+    private void restoreRedisCache(DraftCache cache) {
         try {
-            draftRedisRepository.saveInitial(rdbCache);
+            draftRedisRepository.saveInitial(cache);
         } catch (RuntimeException e) {
             log.warn(
-                    "Failed to restore Redis draft from RDB. draftId={}",
-                    rdbCache.draftId(),
+                    "Failed to restore Redis draft cache. draftId={}",
+                    cache.draftId(),
                     e
             );
         }
@@ -445,9 +489,15 @@ public class DraftService {
                 );
     }
 
-    private DraftCache toRequestCache(Draft draft, DraftRequestDto request, LocalDateTime requestedAt) {
+    private DraftCache toRequestCache(
+            Long userId,
+            Long draftId,
+            DraftRequestDto request,
+            LocalDateTime requestedAt
+    ) {
         return new DraftCache(
-                draft.getDraftId(),
+                draftId,
+                userId,
                 request.getTitle(),
                 request.getPostBody(),
                 request.getPostImage(),
@@ -485,6 +535,16 @@ public class DraftService {
             case CONTENT_CONFLICT ->
                     throw new ApiException(
                             ErrorCode.DRAFT_CONTENT_CONFLICT
+                    );
+
+            case OWNER_CONFLICT ->
+                    throw new ApiException(
+                            ErrorCode.DRAFT_NOT_FOUND
+                    );
+
+            case FALLBACK_REQUIRED ->
+                    throw new IllegalStateException(
+                            "Redis fallback was not resolved before handling autosave result"
                     );
         };
     }

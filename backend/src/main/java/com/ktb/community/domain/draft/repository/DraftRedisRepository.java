@@ -23,6 +23,7 @@ public class DraftRedisRepository {
     private static final String DRAFT_KEY_PREFIX = "draft:";
     private static final String DIRTY_KEY = "draft:dirty";
     private static final String FIELD_DRAFT_ID = "draftId";
+    private static final String FIELD_OWNER_ID = "ownerId";
     private static final String FIELD_TITLE = "title";
     private static final String FIELD_POST_BODY = "postBody";
     private static final String FIELD_POST_IMAGE = "postImage";
@@ -149,6 +150,7 @@ public class DraftRedisRepository {
         Map<String, String> values = new LinkedHashMap<>();
 
         values.put(FIELD_DRAFT_ID, cache.draftId().toString());
+        values.put(FIELD_OWNER_ID, requireOwnerId(cache));
         values.put(FIELD_TITLE, cache.title());
         values.put(FIELD_POST_BODY, cache.postBody());
         values.put(FIELD_POST_IMAGE, encodeImage(cache.postImage()));
@@ -175,11 +177,17 @@ public class DraftRedisRepository {
                 FIELD_CONTENT_VERSION
         );
 
+        String ownerValue = entries.get(FIELD_OWNER_ID);
+        Long ownerId = ownerValue == null
+                ? null
+                : parseLong(ownerValue, FIELD_OWNER_ID);
+
         LocalDateTime updatedAt =
                 parseUpdatedAt(requireField(entries, FIELD_UPDATED_AT));
 
         return new DraftCache(
                 storedDraftId,
+                ownerId,
                 requireField(
                         entries,
                         FIELD_TITLE
@@ -262,8 +270,37 @@ public class DraftRedisRepository {
         return DRAFT_KEY_PREFIX + draftId;
     }
 
+    public DraftRedisSaveResult saveIfNewer(DraftCache request) {
+        return executeAutosave(request, null);
+    }
+
     public DraftRedisSaveResult saveIfNewer(DraftCache request, DraftCache fallback) {
+        if (fallback == null) {
+            return saveIfNewer(request);
+        }
+
         validateSameDraft(request, fallback);
+
+        if (request.ownerId() == null
+                || fallback.ownerId() == null
+                || !request.ownerId().equals(fallback.ownerId())) {
+            throw new IllegalArgumentException(
+                    "Request and fallback owner IDs must match"
+            );
+        }
+
+        return executeAutosave(request, fallback);
+    }
+
+    private DraftRedisSaveResult executeAutosave(
+            DraftCache request,
+            DraftCache fallback
+    ) {
+        if (request.ownerId() == null) {
+            throw new IllegalArgumentException(
+                    "Request owner ID must not be null"
+            );
+        }
 
         long ttlSeconds = redisTtl.toSeconds();
 
@@ -282,6 +319,8 @@ public class DraftRedisRepository {
                         ),
                         request.draftId()
                                 .toString(),
+                        request.ownerId()
+                                .toString(),
                         request.title(),
                         request.postBody(),
                         encodeImage(
@@ -290,16 +329,24 @@ public class DraftRedisRepository {
                         Long.toString(
                                 request.contentVersion()
                         ),
-                        fallback.title(),
-                        fallback.postBody(),
-                        encodeImage(
-                                fallback.postImage()
-                        ),
-                        Long.toString(
-                                fallback.contentVersion()
-                        ),
-                        fallback.updatedAt()
-                                .toString(),
+                        fallback == null
+                                ? ""
+                                : fallback.ownerId().toString(),
+                        fallback == null
+                                ? ""
+                                : fallback.title(),
+                        fallback == null
+                                ? ""
+                                : fallback.postBody(),
+                        fallback == null
+                                ? ""
+                                : encodeImage(fallback.postImage()),
+                        fallback == null
+                                ? "0"
+                                : Long.toString(fallback.contentVersion()),
+                        fallback == null
+                                ? ""
+                                : fallback.updatedAt().toString(),
                         request.updatedAt()
                                 .toString(),
                         Long.toString(ttlSeconds),
@@ -308,7 +355,7 @@ public class DraftRedisRepository {
                         )
                 );
 
-        return toSaveResult(request.draftId(), result);
+        return toSaveResult(request, result);
     }
 
     private void validateSameDraft(DraftCache request, DraftCache fallback) {
@@ -320,7 +367,10 @@ public class DraftRedisRepository {
         }
     }
 
-    private DraftRedisSaveResult toSaveResult(Long draftId, List<?> result) {
+    private DraftRedisSaveResult toSaveResult(
+            DraftCache request,
+            List<?> result
+    ) {
         if (result == null || result.size() != 6) {
             throw new IllegalStateException(
                     "Invalid autosave Lua result"
@@ -340,7 +390,8 @@ public class DraftRedisRepository {
         LocalDateTime updatedAt = parseUpdatedAt(resultValue(result, 5));
 
         DraftCache cache = new DraftCache(
-                draftId,
+                request.draftId(),
+                request.ownerId(),
                 title,
                 postBody,
                 postImage,
@@ -373,10 +424,24 @@ public class DraftRedisRepository {
 
             case "4" -> DraftRedisSaveStatus.CONTENT_CONFLICT;
 
+            case "5" -> DraftRedisSaveStatus.FALLBACK_REQUIRED;
+
+            case "6" -> DraftRedisSaveStatus.OWNER_CONFLICT;
+
             default -> throw new IllegalStateException(
                             "Unknown autosave status: " + value
                     );
         };
+    }
+
+    private String requireOwnerId(DraftCache cache) {
+        if (cache.ownerId() == null) {
+            throw new IllegalArgumentException(
+                    "Draft cache owner ID must not be null"
+            );
+        }
+
+        return cache.ownerId().toString();
     }
 
     public boolean removeDirtyIfVersionMatches(Long draftId, long rdbContentVersion) {

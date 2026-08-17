@@ -8,6 +8,7 @@ import java.util.Objects;
 
 public record DraftCache(
         Long draftId,
+        Long ownerId,
         String title,
         String postBody,
         String postImage,
@@ -34,6 +35,18 @@ public record DraftCache(
         return Objects.equals(title, other.title())
                 && Objects.equals(postBody, other.postBody())
                 && Objects.equals(postImage, other.postImage());
+    }
+
+    public DraftCache withOwnerId(Long newOwnerId) {
+        return new DraftCache(
+                draftId,
+                newOwnerId,
+                title,
+                postBody,
+                postImage,
+                contentVersion,
+                updatedAt
+        );
     }
 
 }
