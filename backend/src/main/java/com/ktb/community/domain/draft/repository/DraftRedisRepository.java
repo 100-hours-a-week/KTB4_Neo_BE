@@ -10,7 +10,9 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import static com.ktb.community.domain.draft.support.DraftContentNormalizer.normalizeImage;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -155,7 +157,10 @@ public class DraftRedisRepository {
         values.put(FIELD_POST_BODY, cache.postBody());
         values.put(FIELD_POST_IMAGE, encodeImage(cache.postImage()));
         values.put(FIELD_CONTENT_VERSION, Long.toString(cache.contentVersion()));
-        values.put(FIELD_UPDATED_AT, cache.updatedAt().toString());
+        values.put(
+                FIELD_UPDATED_AT,
+                Long.toString(toEpochMillis(cache.updatedAt()))
+        );
 
         return values;
     }
@@ -233,14 +238,18 @@ public class DraftRedisRepository {
     }
 
     private LocalDateTime parseUpdatedAt(String value) {
-        try {
-            return LocalDateTime.parse(value);
-        } catch (RuntimeException e) {
-            throw new IllegalStateException(
-                    "Invalid Redis draft updatedAt",
-                    e
-            );
-        }
+        long epochMillis = parseLong(value, FIELD_UPDATED_AT);
+
+        return LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(epochMillis),
+                ZoneId.systemDefault()
+        );
+    }
+
+    private long toEpochMillis(LocalDateTime value) {
+        return value.atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli();
     }
 
     private Long parseDraftId(String value) {
@@ -346,9 +355,12 @@ public class DraftRedisRepository {
                                 : Long.toString(fallback.contentVersion()),
                         fallback == null
                                 ? ""
-                                : fallback.updatedAt().toString(),
-                        request.updatedAt()
-                                .toString(),
+                                : Long.toString(
+                                        toEpochMillis(fallback.updatedAt())
+                                ),
+                        Long.toString(
+                                toEpochMillis(request.updatedAt())
+                        ),
                         Long.toString(ttlSeconds),
                         Long.toString(
                                 System.currentTimeMillis()
