@@ -21,6 +21,8 @@ import com.ktb.community.global.exception.ErrorCode;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
+import org.springframework.data.redis.RedisConnectionFailureException;
+import org.springframework.data.redis.RedisSystemException;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.support.TransactionSynchronization;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
@@ -217,13 +219,10 @@ public class DraftService {
 
         DraftCache rdbFallback = toRdbCache(draft);
 
-        DraftRedisSaveResult redisResult =
-                draftRedisRepository.saveIfNewer(
-                        publishRequestCache,
-                        rdbFallback
-                );
-
-        DraftCache finalCache = getSuccessfulRedisCache(redisResult);
+        DraftCache finalCache = resolvePublishCache(
+                publishRequestCache,
+                rdbFallback
+        );
 
         Post savedPost = createPostFromDraft(user, finalCache);
 
@@ -243,6 +242,28 @@ public class DraftService {
         deleteRedisAfterCommit(draft.getDraftId());
 
         return toPublishResponse(savedPost);
+    }
+
+    private DraftCache resolvePublishCache(
+            DraftCache publishRequestCache,
+            DraftCache rdbFallback
+    ) {
+        try {
+            DraftRedisSaveResult redisResult =
+                    draftRedisRepository.saveIfNewer(
+                            publishRequestCache,
+                            rdbFallback
+                    );
+
+            return getSuccessfulRedisCache(redisResult);
+        } catch (RedisConnectionFailureException | RedisSystemException e) {
+            log.warn(
+                    "Redis unavailable while publishing draft. Using RDB snapshot. draftId={}",
+                    rdbFallback.draftId(),
+                    e
+            );
+            return rdbFallback;
+        }
     }
 
 

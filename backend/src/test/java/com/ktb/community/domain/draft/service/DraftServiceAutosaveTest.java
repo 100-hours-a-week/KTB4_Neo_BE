@@ -1,6 +1,8 @@
 package com.ktb.community.domain.draft.service;
 
 import com.ktb.community.domain.draft.dto.DraftAutosaveResponseDto;
+import com.ktb.community.domain.draft.dto.DraftPublishRequestDto;
+import com.ktb.community.domain.draft.dto.DraftPublishResponseDto;
 import com.ktb.community.domain.draft.dto.DraftRequestDto;
 import com.ktb.community.domain.draft.repository.DraftCache;
 import com.ktb.community.domain.draft.repository.DraftRedisRepository;
@@ -11,6 +13,8 @@ import com.ktb.community.domain.draft.entity.Draft;
 import com.ktb.community.domain.draft.entity.DraftStatus;
 import com.ktb.community.domain.draft.dto.DraftResponseDto;
 import com.ktb.community.domain.post.repository.PostRepository;
+import com.ktb.community.domain.post.entity.Post;
+import com.ktb.community.domain.user.entity.User;
 import com.ktb.community.domain.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -23,6 +27,8 @@ import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.ArgumentCaptor.forClass;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -30,6 +36,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import org.mockito.ArgumentCaptor;
+import org.springframework.data.redis.RedisConnectionFailureException;
 
 @ExtendWith(MockitoExtension.class)
 class DraftServiceAutosaveTest {
@@ -190,5 +197,61 @@ class DraftServiceAutosaveTest {
         assertThat(migratedCache.ownerId()).isEqualTo(userId);
         assertThat(migratedCache.title()).isEqualTo("redis title");
         assertThat(migratedCache.contentVersion()).isEqualTo(2L);
+    }
+
+    @Test
+    void publishUsesRdbSnapshotWhenRedisConnectionFails() {
+        Long userId = 7L;
+        Long draftId = 11L;
+        User user = mock(User.class);
+        Draft draft = mock(Draft.class);
+        Post post = mock(Post.class);
+        DraftPublishRequestDto request = new DraftPublishRequestDto(
+                "request title",
+                "request body",
+                null,
+                2L
+        );
+
+        when(user.getUserId()).thenReturn(userId);
+        when(user.getNickname()).thenReturn("nickname");
+        when(draft.getDraftId()).thenReturn(draftId);
+        when(draft.getActiveOwnerId()).thenReturn(userId);
+        when(draft.getTitle()).thenReturn("rdb title");
+        when(draft.getPostBody()).thenReturn("rdb body");
+        when(draft.getPostImage()).thenReturn(null);
+        when(draft.getContentVersion()).thenReturn(1L);
+        when(draft.getRdbSavedAt()).thenReturn(LocalDateTime.now());
+        when(draft.getStatus()).thenReturn(DraftStatus.ACTIVE);
+        when(draft.isActive()).thenReturn(true);
+        when(draftRepository.findByDraftIdAndUserId(draftId, userId))
+                .thenReturn(Optional.of(draft));
+        when(postRepository.countByUserIdAndCreatedAtAfter(any(), any()))
+                .thenReturn(0L);
+        when(draftRedisRepository.saveIfNewer(any(DraftCache.class), any(DraftCache.class)))
+                .thenThrow(new RedisConnectionFailureException("Redis unavailable"));
+        when(postRepository.saveAndFlush(any(Post.class))).thenReturn(post);
+        when(post.getPostId()).thenReturn(99L);
+        when(post.getUser()).thenReturn(user);
+
+        DraftPublishResponseDto response = draftService.publishDraft(
+                userId,
+                draftId,
+                request
+        );
+
+        assertThat(response.getPostId()).isEqualTo(99L);
+        ArgumentCaptor<Post> postCaptor = forClass(Post.class);
+        verify(postRepository).saveAndFlush(postCaptor.capture());
+        assertThat(postCaptor.getValue().getTitle()).isEqualTo("rdb title");
+        assertThat(postCaptor.getValue().getPostBody()).isEqualTo("rdb body");
+        verify(draft).publish(
+                eq("rdb title"),
+                eq("rdb body"),
+                isNull(),
+                eq(1L),
+                eq(99L),
+                any(LocalDateTime.class)
+        );
     }
 }
