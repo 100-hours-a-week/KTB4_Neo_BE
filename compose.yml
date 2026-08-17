@@ -7,8 +7,18 @@ services:
     image: redis:7-alpine
     restart: unless-stopped
 
+    # Redis가 1GiB EC2 인스턴스의 남은 메모리를 무제한으로 사용하지 않도록 제한한다.
+    mem_limit: 256m
+
     # AOF를 사용해 컨테이너 재시작 후에도 최신 Draft 버퍼를 복구한다.
-    command: ["redis-server", "--appendonly", "yes"]
+    # Draft와 업로드 세션은 자동 삭제되면 안 되므로 한도 초과 시 쓰기를 거부한다.
+    command:
+      [
+        "redis-server",
+        "--appendonly", "yes",
+        "--maxmemory", "192mb",
+        "--maxmemory-policy", "noeviction"
+      ]
 
     volumes:
       - redis-data:/data
