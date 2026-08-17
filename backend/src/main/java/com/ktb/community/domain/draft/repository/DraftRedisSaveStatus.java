@@ -4,5 +4,7 @@ public enum DraftRedisSaveStatus {
     SAVED,
     IDEMPOTENT,
     VERSION_CONFLICT,
-    CONTENT_CONFLICT
+    CONTENT_CONFLICT,
+    FALLBACK_REQUIRED,
+    OWNER_CONFLICT
 }

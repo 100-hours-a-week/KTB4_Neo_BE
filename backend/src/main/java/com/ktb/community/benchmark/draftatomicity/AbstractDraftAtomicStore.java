@@ -13,11 +13,13 @@ abstract class AbstractDraftAtomicStore implements DraftAtomicStore {
     static final String KEY_PREFIX = "perf:draft:";
     static final String DIRTY_KEY = "perf:draft:dirty";
     static final String FIELD_DRAFT_ID = "draftId";
+    static final String FIELD_OWNER_ID = "ownerId";
     static final String FIELD_TITLE = "title";
     static final String FIELD_POST_BODY = "postBody";
     static final String FIELD_POST_IMAGE = "postImage";
     static final String FIELD_CONTENT_VERSION = "contentVersion";
     static final String FIELD_UPDATED_AT = "updatedAt";
+    static final String BENCHMARK_OWNER_ID = "benchmark-owner";
 
     final StringRedisTemplate redisTemplate;
     final Duration ttl;
@@ -41,6 +43,7 @@ abstract class AbstractDraftAtomicStore implements DraftAtomicStore {
     static Map<String, String> toHash(DraftAtomicSnapshot snapshot) {
         Map<String, String> values = new LinkedHashMap<>();
         values.put(FIELD_DRAFT_ID, snapshot.draftId().toString());
+        values.put(FIELD_OWNER_ID, BENCHMARK_OWNER_ID);
         values.put(FIELD_TITLE, encode(snapshot.title()));
         values.put(FIELD_POST_BODY, encode(snapshot.postBody()));
         values.put(FIELD_POST_IMAGE, encode(snapshot.postImage()));
