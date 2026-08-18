@@ -119,7 +119,13 @@ services:
     ports:
       - "16379:6379"
 
-    command: ["redis-server", "--appendonly", "yes"]
+    command:
+      [
+        "redis-server",
+        "--appendonly", "yes",
+        "--maxmemory", "384mb",
+        "--maxmemory-policy", "noeviction"
+      ]
 
     volumes:
       - redis-perf-data:/data
