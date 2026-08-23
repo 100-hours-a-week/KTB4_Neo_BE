@@ -98,7 +98,7 @@ public class WatchDraftAtomicStore extends AbstractDraftAtomicStore {
                             operations.expire(key, ttl);
                             if (status == DraftAtomicStatus.SAVED) {
                                 operations.opsForZSet().add(
-                                        DIRTY_KEY,
+                                        DRAFT_PENDING_SYNC_INDEX_KEY,
                                         request.draftId().toString(),
                                         dirtyScore
                                 );
@@ -154,7 +154,7 @@ public class WatchDraftAtomicStore extends AbstractDraftAtomicStore {
                             if (versionValue == null) {
                                 operations.multi();
                                 operations.opsForZSet().remove(
-                                        DIRTY_KEY,
+                                        DRAFT_PENDING_SYNC_INDEX_KEY,
                                         draftId.toString()
                                 );
                             } else {
@@ -170,7 +170,7 @@ public class WatchDraftAtomicStore extends AbstractDraftAtomicStore {
                                     operations.delete(key);
                                 }
                                 operations.opsForZSet().remove(
-                                        DIRTY_KEY,
+                                        DRAFT_PENDING_SYNC_INDEX_KEY,
                                         draftId.toString()
                                 );
                             }

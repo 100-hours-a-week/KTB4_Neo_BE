@@ -82,7 +82,7 @@ public class DraftAtomicBenchmarkService {
         long operationNanos = System.nanoTime() - started;
         metrics.recordDirty(strategy, removed, operationNanos);
         redisTemplate.opsForZSet().add(
-                AbstractDraftAtomicStore.DIRTY_KEY,
+                AbstractDraftAtomicStore.DRAFT_PENDING_SYNC_INDEX_KEY,
                 draftId.toString(),
                 System.currentTimeMillis()
         );
@@ -102,13 +102,13 @@ public class DraftAtomicBenchmarkService {
         redisTemplate.expire(key, ttl);
         if (request.dirty()) {
             redisTemplate.opsForZSet().add(
-                    AbstractDraftAtomicStore.DIRTY_KEY,
+                    AbstractDraftAtomicStore.DRAFT_PENDING_SYNC_INDEX_KEY,
                     request.draftId().toString(),
                     System.currentTimeMillis()
             );
         } else {
             redisTemplate.opsForZSet().remove(
-                    AbstractDraftAtomicStore.DIRTY_KEY,
+                    AbstractDraftAtomicStore.DRAFT_PENDING_SYNC_INDEX_KEY,
                     request.draftId().toString()
             );
         }
@@ -127,12 +127,12 @@ public class DraftAtomicBenchmarkService {
                 redisTemplate.getExpire(key),
                 Boolean.TRUE.equals(
                         redisTemplate.opsForZSet().score(
-                                AbstractDraftAtomicStore.DIRTY_KEY,
+                                AbstractDraftAtomicStore.DRAFT_PENDING_SYNC_INDEX_KEY,
                                 draftId.toString()
                         ) != null
                 ),
                 redisTemplate.opsForZSet().score(
-                        AbstractDraftAtomicStore.DIRTY_KEY,
+                        AbstractDraftAtomicStore.DRAFT_PENDING_SYNC_INDEX_KEY,
                         draftId.toString()
                 )
         );
@@ -141,7 +141,7 @@ public class DraftAtomicBenchmarkService {
     public void createOrphanDirty(Long draftId) {
         redisTemplate.delete(AbstractDraftAtomicStore.draftKey(draftId));
         redisTemplate.opsForZSet().add(
-                AbstractDraftAtomicStore.DIRTY_KEY,
+                AbstractDraftAtomicStore.DRAFT_PENDING_SYNC_INDEX_KEY,
                 draftId.toString(),
                 System.currentTimeMillis()
         );

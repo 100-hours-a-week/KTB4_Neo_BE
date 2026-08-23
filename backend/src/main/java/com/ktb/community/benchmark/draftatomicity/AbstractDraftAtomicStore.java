@@ -10,8 +10,9 @@ import java.util.Map;
 
 abstract class AbstractDraftAtomicStore implements DraftAtomicStore {
 
-    static final String KEY_PREFIX = "perf:draft:";
-    static final String DIRTY_KEY = "perf:draft:dirty";
+    static final String DRAFT_DATA_KEY_PREFIX = "perf:draft:data:";
+    static final String DRAFT_PENDING_SYNC_INDEX_KEY =
+            "perf-draft-index:pending-sync";
     static final String FIELD_DRAFT_ID = "draftId";
     static final String FIELD_OWNER_ID = "ownerId";
     static final String FIELD_TITLE = "title";
@@ -33,7 +34,7 @@ abstract class AbstractDraftAtomicStore implements DraftAtomicStore {
     }
 
     static String draftKey(Long draftId) {
-        return KEY_PREFIX + draftId;
+        return DRAFT_DATA_KEY_PREFIX + draftId;
     }
 
     static String encode(String value) {

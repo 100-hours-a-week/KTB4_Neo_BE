@@ -21,8 +21,8 @@ import java.util.Set;
 @Repository
 public class DraftRedisRepository {
 
-    private static final String DRAFT_KEY_PREFIX = "draft:";
-    private static final String DIRTY_KEY = "draft:dirty";
+    private static final String DRAFT_DATA_KEY_PREFIX = "draft:data:";
+    private static final String DRAFT_PENDING_SYNC_INDEX_KEY = "draft-index:pending-sync";
     private static final String FIELD_DRAFT_ID = "draftId";
     private static final String FIELD_OWNER_ID = "ownerId";
     private static final String FIELD_TITLE = "title";
@@ -116,7 +116,7 @@ public class DraftRedisRepository {
                 redisTemplate
                         .opsForZSet()
                         .rangeByScore(
-                                DIRTY_KEY,
+                                DRAFT_PENDING_SYNC_INDEX_KEY,
                                 0,
                                 maxScore,
                                 0,
@@ -136,7 +136,7 @@ public class DraftRedisRepository {
         redisTemplate
                 .opsForZSet()
                 .remove(
-                        DIRTY_KEY,
+                        DRAFT_PENDING_SYNC_INDEX_KEY,
                         draftId.toString()
                 );
     }
@@ -263,7 +263,7 @@ public class DraftRedisRepository {
             );
         }
 
-        return DRAFT_KEY_PREFIX + draftId;
+        return DRAFT_DATA_KEY_PREFIX + draftId;
     }
 
     public DraftRedisSaveResult saveIfNewer(DraftCache request) {
@@ -311,7 +311,7 @@ public class DraftRedisRepository {
                                 draftKey(
                                         request.draftId()
                                 ),
-                                DIRTY_KEY
+                                DRAFT_PENDING_SYNC_INDEX_KEY
                         ),
                         request.draftId()
                                 .toString(),
@@ -449,7 +449,7 @@ public class DraftRedisRepository {
                         removeDirtyScript,
                         List.of(
                                 draftKey(draftId),
-                                DIRTY_KEY
+                                DRAFT_PENDING_SYNC_INDEX_KEY
                         ),
                         draftId.toString(),
                         Long.toString(

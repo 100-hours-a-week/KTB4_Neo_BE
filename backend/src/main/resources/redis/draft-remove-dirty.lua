@@ -13,9 +13,9 @@ local draftExists =
     redis.call("EXISTS", draftKey) == 1
 
 -- Redis Draft가 존재하지 않는 경우
--- (Redis Draft가 TTL이 만료됐지만 dirty만 존재하는 경우)
--- 예를 들어 draft:15 없는데, draft:dirty에 draftId 15가 존재
--- 동기화할 본문 없으므로 고아 dirty 제거
+-- (Redis Draft가 TTL이 만료됐지만 pending-sync 항목만 존재하는 경우)
+-- 예를 들어 draft:data:15 없는데, draft-index:pending-sync에 draftId 15가 존재
+-- 동기화할 본문이 없으므로 고아 pending-sync 항목 제거
 if not draftExists then
     redis.call(
         "ZREM",
