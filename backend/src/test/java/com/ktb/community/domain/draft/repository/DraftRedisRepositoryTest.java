@@ -57,7 +57,7 @@ class DraftRedisRepositoryTest {
         );
         when(redisTemplate.execute(
                 any(DefaultRedisScript.class),
-                eq(java.util.List.of("draft:11")),
+                eq(java.util.List.of("draft:data:11")),
                 any(Object[].class)
         )).thenReturn(1L);
 
@@ -67,7 +67,7 @@ class DraftRedisRepositoryTest {
                 ArgumentCaptor.forClass(Object[].class);
         verify(redisTemplate).execute(
                 any(DefaultRedisScript.class),
-                eq(java.util.List.of("draft:11")),
+                eq(java.util.List.of("draft:data:11")),
                 argumentsCaptor.capture()
         );
 
@@ -97,7 +97,7 @@ class DraftRedisRepositoryTest {
         );
         when(redisTemplate.execute(
                 any(DefaultRedisScript.class),
-                eq(java.util.List.of("draft:11")),
+                eq(java.util.List.of("draft:data:11")),
                 any(Object[].class)
         )).thenReturn(1L);
 
@@ -105,15 +105,15 @@ class DraftRedisRepositoryTest {
 
         verify(redisTemplate).execute(
                 any(DefaultRedisScript.class),
-                eq(java.util.List.of("draft:11")),
+                eq(java.util.List.of("draft:data:11")),
                 any(Object[].class)
         );
         verify(hashOperations, never()).putAll(
-                eq("draft:11"),
+                eq("draft:data:11"),
                 any(Map.class)
         );
         verify(redisTemplate, never()).expire(
-                eq("draft:11"),
+                eq("draft:data:11"),
                 eq(Duration.ofDays(3))
         );
     }
@@ -121,7 +121,7 @@ class DraftRedisRepositoryTest {
     @Test
     void findByIdReadsOwnerIdFromTheDraftHash() {
         LocalDateTime updatedAt = LocalDateTime.parse("2026-08-17T18:00:00");
-        when(hashOperations.entries("draft:11"))
+        when(hashOperations.entries("draft:data:11"))
                 .thenReturn(Map.of(
                         "draftId", "11",
                         "ownerId", "7",
