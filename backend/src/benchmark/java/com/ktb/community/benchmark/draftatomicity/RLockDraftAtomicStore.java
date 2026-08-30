@@ -85,7 +85,7 @@ public class RLockDraftAtomicStore extends AbstractDraftAtomicStore {
                 );
                 redisTemplate.expire(draftKey(request.draftId()), ttl);
                 redisTemplate.opsForZSet().add(
-                        DIRTY_KEY,
+                        DRAFT_PENDING_SYNC_INDEX_KEY,
                         request.draftId().toString(),
                         dirtyScore
                 );
@@ -139,7 +139,7 @@ public class RLockDraftAtomicStore extends AbstractDraftAtomicStore {
                     .get(key, FIELD_CONTENT_VERSION);
             if (versionValue == null) {
                 redisTemplate.opsForZSet().remove(
-                        DIRTY_KEY,
+                        DRAFT_PENDING_SYNC_INDEX_KEY,
                         draftId.toString()
                 );
                 return true;
@@ -147,7 +147,7 @@ public class RLockDraftAtomicStore extends AbstractDraftAtomicStore {
             long redisVersion = Long.parseLong(versionValue.toString());
             if (redisVersion == rdbContentVersion) {
                 redisTemplate.opsForZSet().remove(
-                        DIRTY_KEY,
+                        DRAFT_PENDING_SYNC_INDEX_KEY,
                         draftId.toString()
                 );
                 return true;
@@ -155,7 +155,7 @@ public class RLockDraftAtomicStore extends AbstractDraftAtomicStore {
             if (redisVersion < rdbContentVersion) {
                 redisTemplate.delete(key);
                 redisTemplate.opsForZSet().remove(
-                        DIRTY_KEY,
+                        DRAFT_PENDING_SYNC_INDEX_KEY,
                         draftId.toString()
                 );
                 return true;

@@ -213,6 +213,7 @@ public class DraftSynchronizationService {
     ) {
         return new DraftCache(
                 draft.getDraftId(),
+                draft.getActiveOwnerId(),
                 draft.getTitle(),
                 draft.getPostBody(),
                 draft.getPostImage(),

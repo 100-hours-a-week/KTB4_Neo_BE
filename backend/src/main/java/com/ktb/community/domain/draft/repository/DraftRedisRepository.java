@@ -10,8 +10,9 @@ import org.springframework.data.redis.core.script.DefaultRedisScript;
 import static com.ktb.community.domain.draft.support.DraftContentNormalizer.normalizeImage;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.time.LocalDateTime;
-import java.util.LinkedHashMap;
+import java.time.ZoneId;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -20,9 +21,10 @@ import java.util.Set;
 @Repository
 public class DraftRedisRepository {
 
-    private static final String DRAFT_KEY_PREFIX = "draft:";
-    private static final String DIRTY_KEY = "draft:dirty";
+    private static final String DRAFT_DATA_KEY_PREFIX = "draft:data:";
+    private static final String DRAFT_PENDING_SYNC_INDEX_KEY = "draft-index:pending-sync";
     private static final String FIELD_DRAFT_ID = "draftId";
+    private static final String FIELD_OWNER_ID = "ownerId";
     private static final String FIELD_TITLE = "title";
     private static final String FIELD_POST_BODY = "postBody";
     private static final String FIELD_POST_IMAGE = "postImage";
@@ -33,6 +35,7 @@ public class DraftRedisRepository {
     private final HashOperations<String, String, String> hashOperations;
     private final Duration redisTtl;
 
+    private final DefaultRedisScript<Long> initialSaveScript;
     private final DefaultRedisScript<List> autosaveScript;
     private final DefaultRedisScript<Long> removeDirtyScript;
 
@@ -47,6 +50,7 @@ public class DraftRedisRepository {
                 redisTemplate.opsForHash();
         this.redisTtl = redisTtl;
 
+        this.initialSaveScript = createInitialSaveScript();
         this.autosaveScript = createAutosaveScript();
 
         this.removeDirtyScript =
@@ -78,23 +82,28 @@ public class DraftRedisRepository {
     public void saveInitial(DraftCache cache) {
         String key = draftKey(cache.draftId());
 
-        redisTemplate
-                .opsForHash()
-                .putAll(
-                        key,
-                        toHash(cache)
+        long ttlSeconds = redisTtl.toSeconds();
+
+        if (ttlSeconds < 1) {
+            throw new IllegalStateException("Draft Redis TTL must be positive");
+        }
+
+        Long result =
+                redisTemplate.execute(
+                        initialSaveScript,
+                        List.of(key),
+                        cache.draftId().toString(),
+                        requireOwnerId(cache),
+                        cache.title(),
+                        cache.postBody(),
+                        encodeImage(cache.postImage()),
+                        Long.toString(cache.contentVersion()),
+                        Long.toString(toEpochMillis(cache.updatedAt())),
+                        Long.toString(ttlSeconds)
                 );
 
-        Boolean expirationApplied =
-                redisTemplate.expire(
-                        key,
-                        redisTtl
-                );
-
-        if (!Boolean.TRUE.equals(expirationApplied)) {
-            redisTemplate.delete(key);
-
-            throw new IllegalStateException("Failed to apply TTL to draft cache");
+        if (result == null || result != 1L) {
+            throw new IllegalStateException("Failed to save initial draft cache");
         }
     }
 
@@ -107,7 +116,7 @@ public class DraftRedisRepository {
                 redisTemplate
                         .opsForZSet()
                         .rangeByScore(
-                                DIRTY_KEY,
+                                DRAFT_PENDING_SYNC_INDEX_KEY,
                                 0,
                                 maxScore,
                                 0,
@@ -127,7 +136,7 @@ public class DraftRedisRepository {
         redisTemplate
                 .opsForZSet()
                 .remove(
-                        DIRTY_KEY,
+                        DRAFT_PENDING_SYNC_INDEX_KEY,
                         draftId.toString()
                 );
     }
@@ -141,21 +150,6 @@ public class DraftRedisRepository {
     public void deleteAll(Long draftId) {
         deleteDraft(draftId);
         removeDirty(draftId);
-    }
-
-    private Map<String, String> toHash(
-            DraftCache cache
-    ) {
-        Map<String, String> values = new LinkedHashMap<>();
-
-        values.put(FIELD_DRAFT_ID, cache.draftId().toString());
-        values.put(FIELD_TITLE, cache.title());
-        values.put(FIELD_POST_BODY, cache.postBody());
-        values.put(FIELD_POST_IMAGE, encodeImage(cache.postImage()));
-        values.put(FIELD_CONTENT_VERSION, Long.toString(cache.contentVersion()));
-        values.put(FIELD_UPDATED_AT, cache.updatedAt().toString());
-
-        return values;
     }
 
     private DraftCache toDraftCache(
@@ -175,11 +169,17 @@ public class DraftRedisRepository {
                 FIELD_CONTENT_VERSION
         );
 
+        String ownerValue = entries.get(FIELD_OWNER_ID);
+        Long ownerId = ownerValue == null
+                ? null
+                : parseLong(ownerValue, FIELD_OWNER_ID);
+
         LocalDateTime updatedAt =
                 parseUpdatedAt(requireField(entries, FIELD_UPDATED_AT));
 
         return new DraftCache(
                 storedDraftId,
+                ownerId,
                 requireField(
                         entries,
                         FIELD_TITLE
@@ -225,14 +225,18 @@ public class DraftRedisRepository {
     }
 
     private LocalDateTime parseUpdatedAt(String value) {
-        try {
-            return LocalDateTime.parse(value);
-        } catch (RuntimeException e) {
-            throw new IllegalStateException(
-                    "Invalid Redis draft updatedAt",
-                    e
-            );
-        }
+        long epochMillis = parseLong(value, FIELD_UPDATED_AT);
+
+        return LocalDateTime.ofInstant(
+                Instant.ofEpochMilli(epochMillis),
+                ZoneId.systemDefault()
+        );
+    }
+
+    private long toEpochMillis(LocalDateTime value) {
+        return value.atZone(ZoneId.systemDefault())
+                .toInstant()
+                .toEpochMilli();
     }
 
     private Long parseDraftId(String value) {
@@ -259,11 +263,40 @@ public class DraftRedisRepository {
             );
         }
 
-        return DRAFT_KEY_PREFIX + draftId;
+        return DRAFT_DATA_KEY_PREFIX + draftId;
+    }
+
+    public DraftRedisSaveResult saveIfNewer(DraftCache request) {
+        return executeAutosave(request, null);
     }
 
     public DraftRedisSaveResult saveIfNewer(DraftCache request, DraftCache fallback) {
+        if (fallback == null) {
+            return saveIfNewer(request);
+        }
+
         validateSameDraft(request, fallback);
+
+        if (request.ownerId() == null
+                || fallback.ownerId() == null
+                || !request.ownerId().equals(fallback.ownerId())) {
+            throw new IllegalArgumentException(
+                    "Request and fallback owner IDs must match"
+            );
+        }
+
+        return executeAutosave(request, fallback);
+    }
+
+    private DraftRedisSaveResult executeAutosave(
+            DraftCache request,
+            DraftCache fallback
+    ) {
+        if (request.ownerId() == null) {
+            throw new IllegalArgumentException(
+                    "Request owner ID must not be null"
+            );
+        }
 
         long ttlSeconds = redisTtl.toSeconds();
 
@@ -278,9 +311,11 @@ public class DraftRedisRepository {
                                 draftKey(
                                         request.draftId()
                                 ),
-                                DIRTY_KEY
+                                DRAFT_PENDING_SYNC_INDEX_KEY
                         ),
                         request.draftId()
+                                .toString(),
+                        request.ownerId()
                                 .toString(),
                         request.title(),
                         request.postBody(),
@@ -290,25 +325,36 @@ public class DraftRedisRepository {
                         Long.toString(
                                 request.contentVersion()
                         ),
-                        fallback.title(),
-                        fallback.postBody(),
-                        encodeImage(
-                                fallback.postImage()
-                        ),
+                        fallback == null
+                                ? ""
+                                : fallback.ownerId().toString(),
+                        fallback == null
+                                ? ""
+                                : fallback.title(),
+                        fallback == null
+                                ? ""
+                                : fallback.postBody(),
+                        fallback == null
+                                ? ""
+                                : encodeImage(fallback.postImage()),
+                        fallback == null
+                                ? "0"
+                                : Long.toString(fallback.contentVersion()),
+                        fallback == null
+                                ? ""
+                                : Long.toString(
+                                        toEpochMillis(fallback.updatedAt())
+                                ),
                         Long.toString(
-                                fallback.contentVersion()
+                                toEpochMillis(request.updatedAt())
                         ),
-                        fallback.updatedAt()
-                                .toString(),
-                        request.updatedAt()
-                                .toString(),
                         Long.toString(ttlSeconds),
                         Long.toString(
                                 System.currentTimeMillis()
                         )
                 );
 
-        return toSaveResult(request.draftId(), result);
+        return toSaveResult(request, result);
     }
 
     private void validateSameDraft(DraftCache request, DraftCache fallback) {
@@ -320,7 +366,10 @@ public class DraftRedisRepository {
         }
     }
 
-    private DraftRedisSaveResult toSaveResult(Long draftId, List<?> result) {
+    private DraftRedisSaveResult toSaveResult(
+            DraftCache request,
+            List<?> result
+    ) {
         if (result == null || result.size() != 6) {
             throw new IllegalStateException(
                     "Invalid autosave Lua result"
@@ -340,7 +389,8 @@ public class DraftRedisRepository {
         LocalDateTime updatedAt = parseUpdatedAt(resultValue(result, 5));
 
         DraftCache cache = new DraftCache(
-                draftId,
+                request.draftId(),
+                request.ownerId(),
                 title,
                 postBody,
                 postImage,
@@ -373,10 +423,24 @@ public class DraftRedisRepository {
 
             case "4" -> DraftRedisSaveStatus.CONTENT_CONFLICT;
 
+            case "5" -> DraftRedisSaveStatus.FALLBACK_REQUIRED;
+
+            case "6" -> DraftRedisSaveStatus.OWNER_CONFLICT;
+
             default -> throw new IllegalStateException(
                             "Unknown autosave status: " + value
                     );
         };
+    }
+
+    private String requireOwnerId(DraftCache cache) {
+        if (cache.ownerId() == null) {
+            throw new IllegalArgumentException(
+                    "Draft cache owner ID must not be null"
+            );
+        }
+
+        return cache.ownerId().toString();
     }
 
     public boolean removeDirtyIfVersionMatches(Long draftId, long rdbContentVersion) {
@@ -385,7 +449,7 @@ public class DraftRedisRepository {
                         removeDirtyScript,
                         List.of(
                                 draftKey(draftId),
-                                DIRTY_KEY
+                                DRAFT_PENDING_SYNC_INDEX_KEY
                         ),
                         draftId.toString(),
                         Long.toString(
@@ -417,6 +481,16 @@ public class DraftRedisRepository {
         DefaultRedisScript<Long> script = new DefaultRedisScript<>();
 
         script.setLocation(new ClassPathResource("redis/draft-remove-dirty.lua"));
+
+        script.setResultType(Long.class);
+
+        return script;
+    }
+
+    private DefaultRedisScript<Long> createInitialSaveScript() {
+        DefaultRedisScript<Long> script = new DefaultRedisScript<>();
+
+        script.setLocation(new ClassPathResource("redis/draft-initial-save.lua"));
 
         script.setResultType(Long.class);
 

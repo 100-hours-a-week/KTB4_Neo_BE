@@ -50,12 +50,17 @@ public class LuaDraftAtomicStore extends AbstractDraftAtomicStore {
         long started = System.nanoTime();
         List<?> values = redisTemplate.execute(
                 autosaveScript,
-                List.of(draftKey(request.draftId()), DIRTY_KEY),
+                List.of(
+                        draftKey(request.draftId()),
+                        DRAFT_PENDING_SYNC_INDEX_KEY
+                ),
                 request.draftId().toString(),
+                BENCHMARK_OWNER_ID,
                 encode(request.title()),
                 encode(request.postBody()),
                 encode(request.postImage()),
                 Long.toString(request.contentVersion()),
+                BENCHMARK_OWNER_ID,
                 encode(fallback.title()),
                 encode(fallback.postBody()),
                 encode(fallback.postImage()),
@@ -101,7 +106,10 @@ public class LuaDraftAtomicStore extends AbstractDraftAtomicStore {
     ) {
         Long result = redisTemplate.execute(
                 removeDirtyScript,
-                List.of(draftKey(draftId), DIRTY_KEY),
+                List.of(
+                        draftKey(draftId),
+                        DRAFT_PENDING_SYNC_INDEX_KEY
+                ),
                 draftId.toString(),
                 Long.toString(rdbContentVersion)
         );
