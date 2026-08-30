@@ -27,15 +27,22 @@ public class DraftCleanupService {
     public int cleanupExpiredDrafts() {
         LocalDateTime cutoff = LocalDateTime.now().minus(retention);
 
-        List<Long> draftIds = draftRepository.findExpiredDraftIds(
-                cutoff,
-                PageRequest.of(0, cleanupBatchSize)
-        );
+        int totalDeletedCount = 0;
 
-        if (draftIds.isEmpty()) {
-            return 0;
+        while (true) {
+            List<Long> draftIds =
+                    draftRepository.findExpiredDraftIds(
+                            cutoff,
+                            PageRequest.of(0, cleanupBatchSize)
+                    );
+
+            if (draftIds.isEmpty()) {
+                break;
+            }
+
+            totalDeletedCount += draftRepository.deleteAllByDraftIds(draftIds);
         }
 
-        return draftRepository.deleteAllByDraftIds(draftIds);
+        return totalDeletedCount;
     }
 }
