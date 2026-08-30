@@ -28,6 +28,30 @@ java {
 	}
 }
 
+sourceSets {
+	benchmark {
+		java.setSrcDirs(['src/benchmark/java'])
+		resources.setSrcDirs(['src/benchmark/resources'])
+
+		compileClasspath += sourceSets.main.output
+		runtimeClasspath += output + sourceSets.main.output
+	}
+}
+
+configurations {
+	benchmarkImplementation.extendsFrom implementation
+	benchmarkRuntimeOnly.extendsFrom runtimeOnly
+	benchmarkCompileOnly.extendsFrom compileOnly
+	benchmarkAnnotationProcessor.extendsFrom annotationProcessor
+}
+
+bootJar {
+	if (project.hasProperty('includeBenchmark')) {
+		from(sourceSets.benchmark.output)
+		dependsOn tasks.named('benchmarkClasses')
+	}
+}
+
 repositories {
 	mavenCentral()
 }
@@ -69,5 +93,13 @@ dependencies {
 		description = 'Generate deterministic local MySQL performance data'
 		classpath = sourceSets.test.runtimeClasspath
 		mainClass.set('com.ktb.community.performance.PerformanceDataGenerator')
+	}
+
+	tasks.register('benchmarkBootRun', JavaExec) {
+		group = 'performance'
+		description = 'Run Redis atomicity benchmark server'
+		classpath = sourceSets.benchmark.runtimeClasspath
+		mainClass.set('com.ktb.community.CommunityApplication')
+		args '--spring.profiles.active=perf'
 	}
 }
