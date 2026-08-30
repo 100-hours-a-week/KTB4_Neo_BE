@@ -22,6 +22,9 @@ COPY build.gradle settings.gradle gradle.properties ./
 # Linux 컨테이너에서 gradlew를 실행할 수 있도록 권한 부여
 RUN chmod +x gradlew
 
+# 성능 테스트 이미지에서만 benchmark 소스셋을 bootJar에 포함한다.
+ARG INCLUDE_BENCHMARK=false
+
 # 프로젝트 의존성 미리 받는다.
 RUN ./gradlew dependencies --no-daemon
 
@@ -29,7 +32,11 @@ RUN ./gradlew dependencies --no-daemon
 COPY src src
 
 # 배포용 Spring Boot JAR 생성
-RUN ./gradlew clean bootJar -x test --no-daemon
+RUN if [ "$INCLUDE_BENCHMARK" = "true" ]; then \
+        ./gradlew clean bootJar -PincludeBenchmark -x test --no-daemon; \
+    else \
+        ./gradlew clean bootJar -x test --no-daemon; \
+    fi
 
 # plain JAR를 제외한 Spring Boot JAR를 찾아 고정 이름으로 복사한다.
 RUN JAR_FILE=$(find build/libs -maxdepth 1 -type f \
